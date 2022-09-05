@@ -1,9 +1,9 @@
 // This has been adapted from the Vulkan tutorial
 
-#include "MyProject.hpp"
+#include "SoundMaze.hpp"
 
-const std::string MODEL_PATH = "source/01mazeUpload.obj";
-const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string MODEL_PATH = "models/maze.obj";
+const std::string TEXTURE_PATH = "textures/maze_rock.jpg";
 
 // The uniform buffer object used in this example
 struct UniformBufferObject {
@@ -31,10 +31,10 @@ class MyProject : public BaseProject {
 	
 	// Here you set the main application parameters
 	void setWindowParameters() {
-		// window size, titile and initial background
+		// window size, title and initial background
 		windowWidth = 1200;
 		windowHeight = 800;
-		windowTitle = "Sound Mazw";
+		windowTitle = "Sound Maze";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
 		// Descriptor pool sizes
