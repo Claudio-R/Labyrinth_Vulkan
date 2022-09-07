@@ -112,6 +112,40 @@ class MyProject : public BaseProject {
 					static_cast<uint32_t>(M1.indices.size()), 1, 0, 0, 0);
 	}
 
+	void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
+		if (glfwGetKey(window, GLFW_KEY_LEFT)) {
+			CamAng->y += deltaT * ROT_SPEED;
+		}
+		if (glfwGetKey(window, GLFW_KEY_RIGHT)) {
+			CamAng->y -= deltaT * ROT_SPEED;
+		}
+		if (glfwGetKey(window, GLFW_KEY_UP)) {
+			CamAng->x += deltaT * ROT_SPEED;
+		}
+		if (glfwGetKey(window, GLFW_KEY_DOWN)) {
+			CamAng->x -= deltaT * ROT_SPEED;
+		}
+	}
+
+	void updateCameraPosition(glm::vec3* CamPos, float deltaT, float MOVE_SPEED, glm::vec3 CamAng) {
+		if (glfwGetKey(window, GLFW_KEY_A)) {
+			*CamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
+		}
+		if (glfwGetKey(window, GLFW_KEY_D)) {
+			*CamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
+		}
+		if (glfwGetKey(window, GLFW_KEY_S)) {
+			*CamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
+		}
+		if (glfwGetKey(window, GLFW_KEY_W)) {
+			*CamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
+		}
+	}
+
 	// Here is where you update the uniforms.
 	// Very likely this will be where you will be writing the logic of your application.
 	void updateUniformBuffer(uint32_t currentImage) {
@@ -125,15 +159,15 @@ class MyProject : public BaseProject {
 		float deltaT = time - lastTime;
 		lastTime = time;
 
-		static glm::vec3 CamAng = glm::vec3(0.0f);
-		static glm::vec3 CamPos = glm::vec3(0.0f, 0.1f, 0.0f);
-
-		const float ROT_SPEED = glm::radians(60.0f);
+		constexpr float ROT_SPEED = glm::radians(60.0f);
 		const float MOVE_SPEED = 0.5f;
 		const float MOUSE_RES = 500.0f;
 
+		static glm::vec3 CamAng = glm::vec3(0.0f);
+		static glm::vec3 CamPos = glm::vec3(0.0f, 0.1f, 0.0f);
 		static double old_xpos = 0, old_ypos = 0;
 		double xpos, ypos;
+
 		glfwGetCursorPos(window, &xpos, &ypos);
 		double m_dx = xpos - old_xpos;
 		double m_dy = ypos - old_ypos;
@@ -146,51 +180,13 @@ class MyProject : public BaseProject {
 			CamAng.x += m_dy * ROT_SPEED / MOUSE_RES;
 		}
 
-		if (glfwGetKey(window, GLFW_KEY_LEFT)) {
-			CamAng.y += deltaT * ROT_SPEED;
-		}
-		if (glfwGetKey(window, GLFW_KEY_RIGHT)) {
-			CamAng.y -= deltaT * ROT_SPEED;
-		}
-		if (glfwGetKey(window, GLFW_KEY_UP)) {
-			CamAng.x += deltaT * ROT_SPEED;
-		}
-		if (glfwGetKey(window, GLFW_KEY_DOWN)) {
-			CamAng.x -= deltaT * ROT_SPEED;
-		}
-		if (glfwGetKey(window, GLFW_KEY_Q)) {
-			CamAng.z -= deltaT * ROT_SPEED;
-		}
-		if (glfwGetKey(window, GLFW_KEY_E)) {
-			CamAng.z += deltaT * ROT_SPEED;
-		}
+		updateCameraAngles(&CamAng, deltaT, ROT_SPEED);
 
 		glm::mat3 CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f), CamAng.y, glm::vec3(0.0f, 1.0f, 0.0f))) *
 			glm::mat3(glm::rotate(glm::mat4(1.0f), CamAng.x, glm::vec3(1.0f, 0.0f, 0.0f))) *
 			glm::mat3(glm::rotate(glm::mat4(1.0f), CamAng.z, glm::vec3(0.0f, 0.0f, 1.0f)));
 
-		if (glfwGetKey(window, GLFW_KEY_A)) {
-			CamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
-				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
-		}
-		if (glfwGetKey(window, GLFW_KEY_D)) {
-			CamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
-				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
-		}
-		if (glfwGetKey(window, GLFW_KEY_S)) {
-			CamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
-				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
-		}
-		if (glfwGetKey(window, GLFW_KEY_W)) {
-			CamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
-				glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
-		}
-		if (glfwGetKey(window, GLFW_KEY_F)) {
-			CamPos -= MOVE_SPEED * glm::vec3(0, 1, 0) * deltaT;
-		}
-		if (glfwGetKey(window, GLFW_KEY_R)) {
-			CamPos += MOVE_SPEED * glm::vec3(0, 1, 0) * deltaT;
-		}
+		updateCameraPosition(&CamPos, deltaT, MOVE_SPEED, CamAng);
 
 		glm::mat4 CamMat = glm::translate(glm::transpose(glm::mat4(CamDir)), -CamPos);
 
@@ -199,12 +195,11 @@ class MyProject : public BaseProject {
         ubo.model = glm::mat4(1.0f);
 		ubo.view = CamMat;
 
-		const float FOV_Y = glm::radians(60.0f);
+		constexpr float FOVY = glm::radians(60.0f);
 		const float NEAR_FIELD = 0.001f;
 		const float FAR_FIELD = 5.0f;
-		ubo.proj = glm::perspective(FOV_Y,
-						swapChainExtent.width / (float) swapChainExtent.height,
-						NEAR_FIELD, FAR_FIELD);
+
+		ubo.proj = glm::perspective(FOVY, swapChainExtent.width / (float) swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
 		ubo.proj[1][1] *= -1;
 		
 		void* data;
