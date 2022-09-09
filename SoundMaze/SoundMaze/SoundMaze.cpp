@@ -1,129 +1,200 @@
-// This has been adapted from the Vulkan tutorial
-
 #include "SoundMaze.hpp"
 
-const std::string MODEL_PATH = "models/maze.obj";
-const std::string TEXTURE_PATH = "textures/maze_rock.jpg";
+const std::string MODEL_PATH_MAZE = "models/maze.obj";
+const std::string TEXTURE_PATH_MAZE = "textures/maze_rock.jpg";
+const std::string MODEL_PATH_TREASURE = "models/cube.obj";
+const std::string TEXTURE_PATH_TREASURE = "textures/maze_rock.jpg";
+const int N = 10;
 
-// The uniform buffer object used in this example
-struct UniformBufferObject {
-	alignas(16) glm::mat4 model;
+/*
+SETS
+set 0: Camera and Environment;
+set 1: Objects
+*/
+struct UniformBufferObject_set0 {
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
 };
-
-
-// MAIN ! 
-class MyProject : public BaseProject {
+struct UniformBufferObject_set1 {
+	alignas(16) glm::mat4 model;
+};
+ 
+class SoundMaze : public BaseProject {
 	protected:
-	// Here you list all the Vulkan objects you need:
 	
-	// Descriptor Layouts [what will be passed to the shaders]
-	DescriptorSetLayout DSL1;
-
 	// Pipelines [Shader couples]
 	Pipeline P1;
 
+	// Descriptor Layouts [what will be passed to the shaders]
+	/* one DSL for each set */
+	DescriptorSetLayout DSL0;
+	DescriptorSetLayout DSL1;
+
 	// Models, textures and Descriptors (values assigned to the uniforms)
+	DescriptorSet DS0;
+
 	Model M1;
 	Texture T1;
 	DescriptorSet DS1;
+
+	Model M2;
+	Texture T2;
+	DescriptorSet DST[N];
 	
-	// Here you set the main application parameters
 	void setWindowParameters() {
 		// window size, title and initial background
 		windowWidth = 1200;
 		windowHeight = 800;
-		windowTitle = "Sound Maze";
+		windowTitle = "Inside the Sound Maze...";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
-		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 1;
-		texturesInPool = 1;
-		setsInPool = 1;
+		uniformBlocksInPool = 2 + N;
+		texturesInPool = 1 + N;
+		setsInPool = 2 + N;
 	}
 	
-	// Here you load and setup all your Vulkan objects
 	void localInit() {
-		// Descriptor Layouts [what will be passed to the shaders]
+	
+		/* DESCRIPTOR SET LAYOUTS */
+		DSL0.init(this, {
+			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+			});
+
 		DSL1.init(this, {
-					// this array contains the binding:
-					// first  element : the binding number
-					// second element : the time of element (buffer or texture)
-					// third  element : the pipeline stage where it will be used
-					{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
-					{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
-				  });
+			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
+			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
+			});
 
-		// Pipelines [Shader couples]
-		// The last array, is a vector of pointer to the layouts of the sets that will
-		// be used in this pipeline. The first element will be set 0, and so on..
-		P1.init(this, "shaders/vert.spv", "shaders/frag.spv", {&DSL1});
+		/* PIPELINE */
+		P1.init(this, "shaders/vert.spv", "shaders/frag.spv", {&DSL0, &DSL1});
 
-		// Models, textures and Descriptors (values assigned to the uniforms)
-		M1.init(this, MODEL_PATH);
-		T1.init(this, TEXTURE_PATH);
+		// MODEL, TEXTURES, DESCRIPTORE SETS
+		/* GLOBAL */
+		DS0.init(this, &DSL0, {
+			{0, UNIFORM, sizeof(UniformBufferObject_set0), nullptr}
+			});
+		
+		/* MAZE */
+		M1.init(this, MODEL_PATH_MAZE);
+		T1.init(this, TEXTURE_PATH_MAZE);
 		DS1.init(this, &DSL1, {
-		// the second parameter, is a pointer to the Uniform Set Layout of this set
-		// the last parameter is an array, with one element per binding of the set.
-		// first  elmenet : the binding number
-		// second element : UNIFORM or TEXTURE (an enum) depending on the type
-		// third  element : only for UNIFORMs, the size of the corresponding C++ object
-		// fourth element : only for TEXTUREs, the pointer to the corresponding texture object
-					{0, UNIFORM, sizeof(UniformBufferObject), nullptr},
-					{1, TEXTURE, 0, &T1}
+			{0, UNIFORM, sizeof(UniformBufferObject_set1), nullptr},
+			{1, TEXTURE, 0, &T1}
+			});
+		
+		/* TREASURES */
+		M2.init(this, MODEL_PATH_TREASURE);
+		T2.init(this, TEXTURE_PATH_TREASURE);
+		for (int i = 0; i < N; i++) {
+			DST[i].init(this, &DSL1, {
+				{0, UNIFORM, sizeof(UniformBufferObject_set1), nullptr},
+				{1, TEXTURE, 0, &T2}
 				});
-	}
+		}
 
-	// Here you destroy all the objects you created!		
+	}
+		
 	void localCleanup() {
+		DS0.cleanup();
+		
 		DS1.cleanup();
 		T1.cleanup();
 		M1.cleanup();
+
+		for (int i = 0; i < N; i++) {
+			DST[i].cleanup();
+		}
+
+		T2.cleanup();
+		M2.cleanup();
+
 		P1.cleanup();
+		DSL0.cleanup();
 		DSL1.cleanup();
 	}
 	
-	// Here it is the creation of the command buffer:
-	// You send to the GPU all the objects you want to draw,
-	// with their buffers and textures
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-				
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-				P1.graphicsPipeline);
-				
-		VkBuffer vertexBuffers[] = {M1.vertexBuffer};
-		// property .vertexBuffer of models, contains the VkBuffer handle to its vertex buffer
-		VkDeviceSize offsets[] = {0};
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-		// property .indexBuffer of models, contains the VkBuffer handle to its index buffer
-		vkCmdBindIndexBuffer(commandBuffer, M1.indexBuffer, 0,
-								VK_INDEX_TYPE_UINT32);
+		
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P1.graphicsPipeline);
+		
+		/* GLOBAL */
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			P1.pipelineLayout, 0, 1, &DS0.descriptorSets[currentImage], 0, nullptr);
 
-		// property .pipelineLayout of a pipeline contains its layout.
-		// property .descriptorSets of a descriptor set contains its elements.
-		vkCmdBindDescriptorSets(commandBuffer,
-						VK_PIPELINE_BIND_POINT_GRAPHICS,
-						P1.pipelineLayout, 0, 1, &DS1.descriptorSets[currentImage],
-						0, nullptr);
-						
-		// property .indices.size() of models, contains the number of triangles * 3 of the mesh.
+		/* MAZE */
+		VkBuffer vertexBuffers_maze[] = { M1.vertexBuffer };
+		VkDeviceSize offsets_maze[] = { 0 };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_maze, offsets_maze);
+		vkCmdBindIndexBuffer(commandBuffer, M1.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			P1.pipelineLayout, 1, 1, &DS1.descriptorSets[currentImage], 0, nullptr);
 		vkCmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(M1.indices.size()), 1, 0, 0, 0);
+			static_cast<uint32_t>(M1.indices.size()), 1, 0, 0, 0);
+
+		/* TREASURES */
+		
+		VkBuffer* vertexBuffers_T[N];
+		for (int i = 0; i < N; i++) {
+			VkBuffer vertexBuffers[] = {M2.vertexBuffer};
+			vertexBuffers_T[i] = vertexBuffers;
+			VkDeviceSize offsets_treasure1[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_T[i], offsets_treasure1);
+			vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				P1.pipelineLayout, 1, 1, &DST[i].descriptorSets[currentImage], 0, nullptr);
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
+		
+		}
+		/*VkBuffer vertexBuffers_treasure1[] = { M2.vertexBuffer };
+		VkDeviceSize offsets_treasure1[] = { 0 };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_treasure1, offsets_treasure1);
+		vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			P1.pipelineLayout, 1, 1, &DS2.descriptorSets[currentImage], 0, nullptr);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
+
+		VkBuffer vertexBuffers_treasure2[] = { M2.vertexBuffer };
+		VkDeviceSize offsets_treasure2[] = { 0 };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_treasure2, offsets_treasure2);
+		vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			P1.pipelineLayout, 1, 1, &DS3.descriptorSets[currentImage], 0, nullptr);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
+
+		VkBuffer vertexBuffers_treasure3[] = { M2.vertexBuffer };
+		VkDeviceSize offsets_treasure3[] = { 0 };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_treasure3, offsets_treasure3);
+		vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			P1.pipelineLayout, 1, 1, &DS4.descriptorSets[currentImage], 0, nullptr);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);*/
+
 	}
 
 	void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
+		static constexpr float MAX_UP_ANGLE = glm::radians(70.0f);
+		static constexpr float MAX_DOWN_ANGLE = glm::radians(-70.0f);
+
 		if (glfwGetKey(window, GLFW_KEY_LEFT)) {
-			CamAng->y += deltaT * ROT_SPEED;
+			CamAng->y += deltaT * 2 * ROT_SPEED;
+
 		}
 		if (glfwGetKey(window, GLFW_KEY_RIGHT)) {
-			CamAng->y -= deltaT * ROT_SPEED;
+			CamAng->y -= deltaT * 2 * ROT_SPEED;
 		}
 		if (glfwGetKey(window, GLFW_KEY_UP)) {
-			CamAng->x += deltaT * ROT_SPEED;
+			if (CamAng->x < MAX_UP_ANGLE) {
+				CamAng->x += deltaT * ROT_SPEED;
+			}
 		}
 		if (glfwGetKey(window, GLFW_KEY_DOWN)) {
-			CamAng->x -= deltaT * ROT_SPEED;
+			if (CamAng->x > MAX_DOWN_ANGLE) {
+				CamAng->x -= deltaT * ROT_SPEED;
+			}
 		}
 	}
 
@@ -146,22 +217,11 @@ class MyProject : public BaseProject {
 		}
 	}
 
-	// Here is where you update the uniforms.
-	// Very likely this will be where you will be writing the logic of your application.
-	void updateUniformBuffer(uint32_t currentImage) {
+	void setUBO_0(UniformBufferObject_set0* ubo_set0, float deltaT) {
 
-		static auto startTime = std::chrono::high_resolution_clock::now();
-		static float lastTime = 0.0f;
-
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>
-			(currentTime - startTime).count();
-		float deltaT = time - lastTime;
-		lastTime = time;
-
-		constexpr float ROT_SPEED = glm::radians(60.0f);
-		const float MOVE_SPEED = 0.5f;
-		const float MOUSE_RES = 500.0f;
+		static constexpr float ROT_SPEED = glm::radians(60.0f);
+		static const float MOVE_SPEED = 0.5f;
+		static const float MOUSE_RES = 500.0f;
 
 		static glm::vec3 CamAng = glm::vec3(0.0f);
 		static glm::vec3 CamPos = glm::vec3(0.0f, 0.1f, 0.0f);
@@ -189,32 +249,70 @@ class MyProject : public BaseProject {
 		updateCameraPosition(&CamPos, deltaT, MOVE_SPEED, CamAng);
 
 		glm::mat4 CamMat = glm::translate(glm::transpose(glm::mat4(CamDir)), -CamPos);
-
-		UniformBufferObject ubo{};
-		
-        ubo.model = glm::mat4(1.0f);
-		ubo.view = CamMat;
+		ubo_set0->view = CamMat;
 
 		constexpr float FOVY = glm::radians(60.0f);
 		const float NEAR_FIELD = 0.001f;
 		const float FAR_FIELD = 5.0f;
 
-		ubo.proj = glm::perspective(FOVY, swapChainExtent.width / (float) swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
-		ubo.proj[1][1] *= -1;
-		
+		ubo_set0->proj = glm::perspective(FOVY, swapChainExtent.width / (float)swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
+		ubo_set0->proj[1][1] *= -1;
+
+	}
+
+	void updateUniformBuffer(uint32_t currentImage) {
+
+		static auto startTime = std::chrono::high_resolution_clock::now();
+		static float lastTime = 0.0f;
+
+		auto currentTime = std::chrono::high_resolution_clock::now();
+		float time = std::chrono::duration<float, std::chrono::seconds::period>
+			(currentTime - startTime).count();
+		float deltaT = time - lastTime;
+		lastTime = time;
+
 		void* data;
 
-		// Here is where you actually update your uniforms
-		vkMapMemory(device, DS1.uniformBuffersMemory[0][currentImage], 0,
-							sizeof(ubo), 0, &data);
-		memcpy(data, &ubo, sizeof(ubo));
+		/*if (state == 3) {
+			ang3 += deltaT;
+		}
+		if (state >= 2) {
+			ang2 += deltaT;
+		}
+		if (state >= 1) {
+			ang1 += deltaT;
+		}*/
+
+		/* GLOBAL */
+		UniformBufferObject_set0 ubo_set0{};
+		setUBO_0(&ubo_set0, deltaT);
+		vkMapMemory(device, DS0.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set0), 0, &data);
+		memcpy(data, &ubo_set0, sizeof(ubo_set0));
+		vkUnmapMemory(device, DS0.uniformBuffersMemory[0][currentImage]);
+		
+		/* MAZE */
+		UniformBufferObject_set1 ubo_set1{};
+		ubo_set1.model = glm::mat4(1.0f);
+		vkMapMemory(device, DS1.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set1), 0, &data);
+		memcpy(data, &ubo_set1, sizeof(ubo_set1));
 		vkUnmapMemory(device, DS1.uniformBuffersMemory[0][currentImage]);
+
+		/* TREASURES */
+		static const float MIN_HEIGHT = 0.2f;
+		for (int i = 0; i < N; i++) {
+			ubo_set1.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, MIN_HEIGHT + i * 0.5f, 0.0f)) *
+				glm::rotate(glm::mat4(1.0f), 
+					time * glm::radians(70.0f + 5.0f * i),
+					glm::vec3(0.0f, 1.0f, 0.0f));
+			vkMapMemory(device, DST[i].uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set1), 0, &data);
+			memcpy(data, &ubo_set1, sizeof(ubo_set1));
+			vkUnmapMemory(device, DST[i].uniformBuffersMemory[0][currentImage]);
+		}
 	}	
 };
 
-// This is the main: probably you do not need to touch this!
 int main() {
-    MyProject app;
+    SoundMaze app;
 
     try {
         app.run();
