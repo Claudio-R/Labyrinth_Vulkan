@@ -1,5 +1,10 @@
 #version 450
 
+layout(set = 1, binding = 0) uniform GlobalUniformBufferObject {
+	mat4 model;
+	vec4 lightColor;
+} gubo;
+
 layout(set = 1, binding = 1) uniform sampler2D texSampler;
 
 layout(location = 0) in vec3 fragViewDir;
@@ -24,6 +29,8 @@ void main() {
 	vec3 specular = specColor * pow(max(dot(R,V), 0.0f), specPower);
 	// Hemispheric ambient
 	vec3 ambient  = (vec3(0.1f,0.1f, 0.1f) * (1.0f + N.y) + vec3(0.0f,0.0f, 0.1f) * (1.0f - N.y)) * diffColor;
+	// Emission
+	vec3 emission = gubo.lightColor.xyz * gubo.lightColor.w;
 	
-	outColor = vec4(clamp(ambient + diffuse + specular, vec3(0.0f), vec3(1.0f)), 1.0f);
+	outColor = vec4(clamp(ambient + diffuse + specular + emission, vec3(0.0f), vec3(1.0f)), 1.0f);
 }

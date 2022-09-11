@@ -1,53 +1,67 @@
+/*
+DA FIXARE VERT0 E FRAG0 PROBABILMENTE
+*/
+
 #include "SoundMaze.hpp"
 
 const std::string MODEL_PATH_MAZE = "models/maze.obj";
 const std::string TEXTURE_PATH_MAZE = "textures/maze_rock.jpg";
-const std::string MODEL_PATH_TREASURE = "models/cube.obj";
+const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
 const std::string TEXTURE_PATH_TREASURE = "textures/maze_rock.jpg";
-const int N = 10;
+const int N = 4;
 
 /*
 SETS
 set 0: Camera and Environment;
 set 1: Objects
 */
-struct UniformBufferObject_set0 {
+struct UniformBufferObject_s0 {
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
 };
-struct UniformBufferObject_set1 {
+
+struct UniformBufferObject_p0_s1 {
 	alignas(16) glm::mat4 model;
+	alignas(16) glm::mat4 lightPos; // 4 treasures, each column contains the position of a light
+	alignas(16) glm::mat4 lightColors;
+	alignas(16) glm::vec3 eyePos;
+	alignas(16) glm::vec4 decay;
+};
+
+struct UniformBufferObject_p1_s1 {
+	alignas(16) glm::mat4 model;
+	alignas(16) glm::vec4 lightColor;
 };
  
 class SoundMaze : public BaseProject {
 	protected:
 	
 	// Pipelines [Shader couples]
-	Pipeline P1;
+	Pipeline P0; // MAZE
+	Pipeline P1; // TREASURES
 
 	// Descriptor Layouts [what will be passed to the shaders]
-	/* one DSL for each set */
-	DescriptorSetLayout DSL0;
-	DescriptorSetLayout DSL1;
+	DescriptorSetLayout DSL_s0;
+	DescriptorSetLayout DSL_p0_s1;
+	DescriptorSetLayout DSL_p1_s1;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
-	DescriptorSet DS0;
+	DescriptorSet DS_s0;
 
 	Model M1;
 	Texture T1;
-	DescriptorSet DS1;
+	DescriptorSet DS_p0_s1;
 
 	Model M2;
 	Texture T2;
-	DescriptorSet DST[N];
+	DescriptorSet DS_p1_s1[N];
 	
-	void setWindowParameters() {
-		// window size, title and initial background
+	void setWindowParameters() {	
 		windowWidth = 1200;
 		windowHeight = 800;
 		windowTitle = "Inside the Sound Maze...";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
-		// Descriptor pool sizes
+		
 		uniformBlocksInPool = 2 + N;
 		texturesInPool = 1 + N;
 		setsInPool = 2 + N;
@@ -56,29 +70,35 @@ class SoundMaze : public BaseProject {
 	void localInit() {
 	
 		/* DESCRIPTOR SET LAYOUTS */
-		DSL0.init(this, {
-			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+		DSL_s0.init(this, {
+			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
 			});
 
-		DSL1.init(this, {
-			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
+		DSL_p0_s1.init(this, {
+			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
+			});
+
+		DSL_p1_s1.init(this, {
+			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
 			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
 			});
 
 		/* PIPELINE */
-		P1.init(this, "shaders/vert.spv", "shaders/frag.spv", {&DSL0, &DSL1});
+		P0.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &DSL_s0, &DSL_p0_s1 });
+		P1.init(this, "shaders/vert1.spv", "shaders/frag1.spv", { &DSL_s0, &DSL_p1_s1 });
 
 		// MODEL, TEXTURES, DESCRIPTORE SETS
 		/* GLOBAL */
-		DS0.init(this, &DSL0, {
-			{0, UNIFORM, sizeof(UniformBufferObject_set0), nullptr}
+		DS_s0.init(this, &DSL_s0, {
+			{0, UNIFORM, sizeof(UniformBufferObject_s0), nullptr}
 			});
 		
 		/* MAZE */
 		M1.init(this, MODEL_PATH_MAZE);
 		T1.init(this, TEXTURE_PATH_MAZE);
-		DS1.init(this, &DSL1, {
-			{0, UNIFORM, sizeof(UniformBufferObject_set1), nullptr},
+		DS_p0_s1.init(this, &DSL_p0_s1, {
+			{0, UNIFORM, sizeof(UniformBufferObject_p0_s1), nullptr},
 			{1, TEXTURE, 0, &T1}
 			});
 		
@@ -86,8 +106,8 @@ class SoundMaze : public BaseProject {
 		M2.init(this, MODEL_PATH_TREASURE);
 		T2.init(this, TEXTURE_PATH_TREASURE);
 		for (int i = 0; i < N; i++) {
-			DST[i].init(this, &DSL1, {
-				{0, UNIFORM, sizeof(UniformBufferObject_set1), nullptr},
+			DS_p1_s1[i].init(this, &DSL_p1_s1, {
+				{0, UNIFORM, sizeof(UniformBufferObject_p1_s1), nullptr},
 				{1, TEXTURE, 0, &T2}
 				});
 		}
@@ -95,31 +115,32 @@ class SoundMaze : public BaseProject {
 	}
 		
 	void localCleanup() {
-		DS0.cleanup();
+		DS_s0.cleanup();
 		
-		DS1.cleanup();
+		DS_p0_s1.cleanup();
 		T1.cleanup();
 		M1.cleanup();
 
 		for (int i = 0; i < N; i++) {
-			DST[i].cleanup();
+			DS_p1_s1[i].cleanup();
 		}
 
 		T2.cleanup();
 		M2.cleanup();
 
+		P0.cleanup();
 		P1.cleanup();
-		DSL0.cleanup();
-		DSL1.cleanup();
+		DSL_s0.cleanup();
+		DSL_p0_s1.cleanup();
+		DSL_p1_s1.cleanup();
 	}
 	
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
 		
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P1.graphicsPipeline);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P0.graphicsPipeline);
 		
 		/* GLOBAL */
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-			P1.pipelineLayout, 0, 1, &DS0.descriptorSets[currentImage], 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P0.pipelineLayout, 0, 1, &DS_s0.descriptorSets[currentImage], 0, nullptr);
 
 		/* MAZE */
 		VkBuffer vertexBuffers_maze[] = { M1.vertexBuffer };
@@ -127,12 +148,12 @@ class SoundMaze : public BaseProject {
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_maze, offsets_maze);
 		vkCmdBindIndexBuffer(commandBuffer, M1.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-			P1.pipelineLayout, 1, 1, &DS1.descriptorSets[currentImage], 0, nullptr);
+			P0.pipelineLayout, 1, 1, &DS_p0_s1.descriptorSets[currentImage], 0, nullptr);
 		vkCmdDrawIndexed(commandBuffer,
 			static_cast<uint32_t>(M1.indices.size()), 1, 0, 0, 0);
 
 		/* TREASURES */
-		
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P1.graphicsPipeline);
 		VkBuffer* vertexBuffers_T[N];
 		for (int i = 0; i < N; i++) {
 			VkBuffer vertexBuffers[] = {M2.vertexBuffer};
@@ -141,38 +162,12 @@ class SoundMaze : public BaseProject {
 			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_T[i], offsets_treasure1);
 			vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-				P1.pipelineLayout, 1, 1, &DST[i].descriptorSets[currentImage], 0, nullptr);
+				P1.pipelineLayout, 1, 1, &DS_p1_s1[i].descriptorSets[currentImage], 0, nullptr);
 			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
 		
 		}
-		/*VkBuffer vertexBuffers_treasure1[] = { M2.vertexBuffer };
-		VkDeviceSize offsets_treasure1[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_treasure1, offsets_treasure1);
-		vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-			P1.pipelineLayout, 1, 1, &DS2.descriptorSets[currentImage], 0, nullptr);
-		vkCmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
-
-		VkBuffer vertexBuffers_treasure2[] = { M2.vertexBuffer };
-		VkDeviceSize offsets_treasure2[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_treasure2, offsets_treasure2);
-		vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-			P1.pipelineLayout, 1, 1, &DS3.descriptorSets[currentImage], 0, nullptr);
-		vkCmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
-
-		VkBuffer vertexBuffers_treasure3[] = { M2.vertexBuffer };
-		VkDeviceSize offsets_treasure3[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_treasure3, offsets_treasure3);
-		vkCmdBindIndexBuffer(commandBuffer, M2.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-			P1.pipelineLayout, 1, 1, &DS4.descriptorSets[currentImage], 0, nullptr);
-		vkCmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);*/
-
+	
 	}
 
 	void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
@@ -217,7 +212,7 @@ class SoundMaze : public BaseProject {
 		}
 	}
 
-	void setUBO_0(UniformBufferObject_set0* ubo_set0, float deltaT) {
+	glm::vec3 setUBO_0(UniformBufferObject_s0* ubo_set0, float deltaT) {
 
 		static constexpr float ROT_SPEED = glm::radians(60.0f);
 		static const float MOVE_SPEED = 0.5f;
@@ -258,6 +253,8 @@ class SoundMaze : public BaseProject {
 		ubo_set0->proj = glm::perspective(FOVY, swapChainExtent.width / (float)swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
 		ubo_set0->proj[1][1] *= -1;
 
+		return CamPos;
+
 	}
 
 	void updateUniformBuffer(uint32_t currentImage) {
@@ -273,40 +270,53 @@ class SoundMaze : public BaseProject {
 
 		void* data;
 
-		/*if (state == 3) {
-			ang3 += deltaT;
-		}
-		if (state >= 2) {
-			ang2 += deltaT;
-		}
-		if (state >= 1) {
-			ang1 += deltaT;
-		}*/
-
-		/* GLOBAL */
-		UniformBufferObject_set0 ubo_set0{};
-		setUBO_0(&ubo_set0, deltaT);
-		vkMapMemory(device, DS0.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set0), 0, &data);
+		UniformBufferObject_s0 ubo_set0{}; /* GLOBAL */
+		glm::vec3 CamPos = setUBO_0(&ubo_set0, deltaT);
+		vkMapMemory(device, DS_s0.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set0), 0, &data);
 		memcpy(data, &ubo_set0, sizeof(ubo_set0));
-		vkUnmapMemory(device, DS0.uniformBuffersMemory[0][currentImage]);
-		
-		/* MAZE */
-		UniformBufferObject_set1 ubo_set1{};
-		ubo_set1.model = glm::mat4(1.0f);
-		vkMapMemory(device, DS1.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set1), 0, &data);
-		memcpy(data, &ubo_set1, sizeof(ubo_set1));
-		vkUnmapMemory(device, DS1.uniformBuffersMemory[0][currentImage]);
+		vkUnmapMemory(device, DS_s0.uniformBuffersMemory[0][currentImage]);
+				
+		/* positions are stored in columns */
+		static glm::mat4 lightPos = glm::mat4(
+			glm::vec4(0.2f, 0.5f, -0.2f, 1.0f), 
+			glm::vec4(-0.2f, 0.5f, -0.2f, 1.0f),
+			glm::vec4(-0.2f, 0.5f, 0.2f, 1.0f),
+			glm::vec4(0.2f, 0.5f, 0.2f, 1.0f)
+		);
 
-		/* TREASURES */
-		static const float MIN_HEIGHT = 0.2f;
+		/* colors are stored in columns */
+		static glm::mat4 lightColors = glm::mat4(
+			glm::vec4(0.8f, 0.2f, 0.2f, 1.0f),
+			glm::vec4(0.2f, 0.8f, 0.2f, 1.0f),
+			glm::vec4(0.2f, 0.2f, 0.8f, 1.0f),
+			glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)
+		);
+
+		/* MAZE */
+		UniformBufferObject_p0_s1 ubo_p0_s1{};
+		ubo_p0_s1.lightPos = lightPos;
+		ubo_p0_s1.lightColors = lightColors;
+		ubo_p0_s1.model = glm::mat4(1.0f);
+		ubo_p0_s1.eyePos = CamPos;
+		ubo_p0_s1.decay = glm::vec4(0.9f, 0.92f, 2.0f, 2.0f);
+
+		vkMapMemory(device, DS_p0_s1.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_p0_s1), 0, &data);
+		memcpy(data, &ubo_p0_s1, sizeof(ubo_p0_s1));
+		vkUnmapMemory(device, DS_p0_s1.uniformBuffersMemory[0][currentImage]);
+
+		UniformBufferObject_p1_s1 ubo_p1_s1{}; /* TREASURES */
+
+		/*static const float MIN_HEIGHT = 0.1f;*/
 		for (int i = 0; i < N; i++) {
-			ubo_set1.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, MIN_HEIGHT + i * 0.5f, 0.0f)) *
-				glm::rotate(glm::mat4(1.0f), 
+			ubo_p1_s1.model = glm::translate(glm::mat4(1.0f), glm::vec3(lightPos[i])) *
+				glm::rotate(glm::mat4(1.0f),
 					time * glm::radians(70.0f + 5.0f * i),
 					glm::vec3(0.0f, 1.0f, 0.0f));
-			vkMapMemory(device, DST[i].uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set1), 0, &data);
-			memcpy(data, &ubo_set1, sizeof(ubo_set1));
-			vkUnmapMemory(device, DST[i].uniformBuffersMemory[0][currentImage]);
+			ubo_p1_s1.lightColor = lightColors[i];
+
+			vkMapMemory(device, DS_p1_s1[i].uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_p1_s1), 0, &data);
+			memcpy(data, &ubo_p1_s1, sizeof(ubo_p1_s1));
+			vkUnmapMemory(device, DS_p1_s1[i].uniformBuffersMemory[0][currentImage]);
 		}
 	}	
 };
