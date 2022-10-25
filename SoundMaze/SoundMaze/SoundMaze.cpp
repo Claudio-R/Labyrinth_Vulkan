@@ -15,7 +15,7 @@ SETS
 set 0: Camera and Environment;
 set 1: Objects
 */
-struct UniformBufferObject_p0_p1_s0 {
+struct UniformBufferObject_s0 {
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
 };
@@ -41,12 +41,12 @@ class SoundMaze : public BaseProject {
 	Pipeline P1; // TREASURES
 
 	// Descriptor Layouts [what will be passed to the shaders]
-	DescriptorSetLayout DSL_p0_p1_s0;
+	DescriptorSetLayout DSL_s0;
 	DescriptorSetLayout DSL_p0_s1;
 	DescriptorSetLayout DSL_p1_s1;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
-	DescriptorSet DS_p0_p1_s0;
+	DescriptorSet DS_s0;
 
 	Model M1;
 	Texture T1;
@@ -70,7 +70,7 @@ class SoundMaze : public BaseProject {
 	void localInit() {
 	
 		/* DESCRIPTOR SET LAYOUTS */
-		DSL_p0_p1_s0.init(this, {
+		DSL_s0.init(this, {
 			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
 			});
 
@@ -85,13 +85,13 @@ class SoundMaze : public BaseProject {
 			});
 
 		/* PIPELINE */
-		P0.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &DSL_p0_p1_s0, &DSL_p0_s1 });
-		P1.init(this, "shaders/vert1.spv", "shaders/frag1.spv", { &DSL_p0_p1_s0, &DSL_p1_s1 });
+		P0.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &DSL_s0, &DSL_p0_s1 });
+		P1.init(this, "shaders/vert1.spv", "shaders/frag1.spv", { &DSL_s0, &DSL_p1_s1 });
 
 		// MODEL, TEXTURES, DESCRIPTORE SETS
 		/* GLOBAL */
-		DS_p0_p1_s0.init(this, &DSL_p0_p1_s0, {
-			{0, UNIFORM, sizeof(UniformBufferObject_p0_p1_s0), nullptr}
+		DS_s0.init(this, &DSL_s0, {
+			{0, UNIFORM, sizeof(UniformBufferObject_s0), nullptr}
 			});
 		
 		/* MAZE */
@@ -115,7 +115,7 @@ class SoundMaze : public BaseProject {
 	}
 		
 	void localCleanup() {
-		DS_p0_p1_s0.cleanup();
+		DS_s0.cleanup();
 		
 		DS_p0_s1.cleanup();
 		T1.cleanup();
@@ -130,7 +130,7 @@ class SoundMaze : public BaseProject {
 
 		P0.cleanup();
 		P1.cleanup();
-		DSL_p0_p1_s0.cleanup();
+		DSL_s0.cleanup();
 		DSL_p0_s1.cleanup();
 		DSL_p1_s1.cleanup();
 	}
@@ -140,7 +140,7 @@ class SoundMaze : public BaseProject {
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P0.graphicsPipeline);
 		
 		/* GLOBAL */
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P0.pipelineLayout, 0, 1, &DS_p0_p1_s0.descriptorSets[currentImage], 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P0.pipelineLayout, 0, 1, &DS_s0.descriptorSets[currentImage], 0, nullptr);
 
 		/* MAZE */
 		VkBuffer vertexBuffers_maze[] = { M1.vertexBuffer };
@@ -212,7 +212,7 @@ class SoundMaze : public BaseProject {
 		}
 	}
 
-	glm::vec3 setUBO_0(UniformBufferObject_p0_p1_s0* ubo_set0, float deltaT) {
+	glm::vec3 setUBO_0(UniformBufferObject_s0* ubo_set0, float deltaT) {
 
 		static constexpr float ROT_SPEED = glm::radians(60.0f);
 		static const float MOVE_SPEED = 0.5f;
@@ -270,18 +270,18 @@ class SoundMaze : public BaseProject {
 
 		void* data;
 
-		UniformBufferObject_p0_p1_s0 ubo_set0{}; /* GLOBAL */
+		UniformBufferObject_s0 ubo_set0{}; /* GLOBAL */
 		glm::vec3 CamPos = setUBO_0(&ubo_set0, deltaT);
-		vkMapMemory(device, DS_p0_p1_s0.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set0), 0, &data);
+		vkMapMemory(device, DS_s0.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_set0), 0, &data);
 		memcpy(data, &ubo_set0, sizeof(ubo_set0));
-		vkUnmapMemory(device, DS_p0_p1_s0.uniformBuffersMemory[0][currentImage]);
+		vkUnmapMemory(device, DS_s0.uniformBuffersMemory[0][currentImage]);
 				
 		/* positions are stored in columns */
 		static glm::mat4 lightPos = glm::mat4(
-			glm::vec4(1.0f, 0.5f, -1.0f, 1.0f), 
-			glm::vec4(-1.0f, 0.5f, -1.0f, 1.0f),
-			glm::vec4(-1.0f, 0.5f, 1.0f, 1.0f),
-			glm::vec4(1.0f, 0.5f, 1.0f, 1.0f)
+			glm::vec4(0.2f, 0.5f, -0.2f, 1.0f), 
+			glm::vec4(-0.2f, 0.5f, -0.2f, 1.0f),
+			glm::vec4(-0.2f, 0.5f, 0.2f, 1.0f),
+			glm::vec4(0.2f, 0.5f, 0.2f, 1.0f)
 		);
 
 		/* colors are stored in columns */
@@ -296,9 +296,9 @@ class SoundMaze : public BaseProject {
 		UniformBufferObject_p0_s1 ubo_p0_s1{};
 		ubo_p0_s1.lightPos = lightPos;
 		ubo_p0_s1.lightColors = lightColors;
-		//ubo_p0_s1.model = glm::mat4(1.0f);
+		ubo_p0_s1.model = glm::mat4(1.0f);
 		ubo_p0_s1.eyePos = CamPos;
-		ubo_p0_s1.decay = glm::vec4(0.9f, 0.92f, 1.5f, 2.0f);
+		ubo_p0_s1.decay = glm::vec4(0.9f, 0.92f, 2.0f, 2.0f);
 
 		vkMapMemory(device, DS_p0_s1.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo_p0_s1), 0, &data);
 		memcpy(data, &ubo_p0_s1, sizeof(ubo_p0_s1));
