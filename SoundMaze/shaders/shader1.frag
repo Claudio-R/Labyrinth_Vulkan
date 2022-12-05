@@ -1,36 +1,27 @@
+// LIGHTS
+
 #version 450
 
-layout(set = 1, binding = 0) uniform GlobalUniformBufferObject {
+layout(set = 1, binding = 0) uniform Light {
 	mat4 model;
-	vec4 lightColor;
-} gubo;
+    vec3 position;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+} light;
 
 layout(set = 1, binding = 1) uniform sampler2D texSampler;
 
-layout(location = 0) in vec3 fragViewDir;
-layout(location = 1) in vec3 fragNorm;
-layout(location = 2) in vec2 fragTexCoord;
+layout(location = 0) in vec3 fragPos;
+layout(location = 1) in vec3 viewDir;
+layout(location = 2) in vec3 normal;
+layout(location = 3) in vec2 texCoord;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
-	const vec3  diffColor = texture(texSampler, fragTexCoord).rgb;
-	const vec3  specColor = vec3(1.0f, 1.0f, 1.0f);
-	const float specPower = 150.0f;
-	const vec3  L = vec3(-0.4830f, 0.8365f, -0.2588f);
-	
-	vec3 N = normalize(fragNorm);
-	vec3 R = -reflect(L, N);
-	vec3 V = normalize(fragViewDir);
-	
-	// Lambert diffuse
-	vec3 diffuse  = diffColor * max(dot(N,L), 0.0f);
-	// Phong specular
-	vec3 specular = specColor * pow(max(dot(R,V), 0.0f), specPower);
-	// Hemispheric ambient
-	vec3 ambient  = (vec3(0.1f,0.1f, 0.1f) * (1.0f + N.y) + vec3(0.0f,0.0f, 0.1f) * (1.0f - N.y)) * diffColor;
-	// Emission
-	vec3 emission = gubo.lightColor.xyz * gubo.lightColor.w;
-	
-	outColor = vec4(clamp(ambient + diffuse + specular + emission, vec3(0.0f), vec3(1.0f)), 1.0f);
+    
+    vec3 result = light.ambient + light.diffuse + light.specular;
+    outColor = vec4(result, 1.0);
+
 }
