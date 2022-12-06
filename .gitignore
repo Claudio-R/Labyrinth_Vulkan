@@ -1,3 +1,14 @@
+# utils
+utils/
+
+# VS Project
+.vs/
+x64/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
 # Prerequisites
 *.d
 
@@ -5,7 +16,7 @@
 *.slo
 *.lo
 *.o
-*.obj
+*.mtl
 
 # Precompiled Headers
 *.gch
