@@ -27,6 +27,11 @@ struct Object {
 	alignas(16) Model model;
 	alignas(16) Texture texture;
 	alignas(16) glm::vec4 specular_color;
+
+	void cleanup() {
+		model.cleanup();
+		texture.cleanup();
+	}
 };
 
 struct Pipe {
@@ -36,6 +41,14 @@ struct Pipe {
 	alignas(16) DescriptorSetLayout dsl;
 	alignas(16) DescriptorSet ds;
 	alignas(16) int setsInPipe = 2;
+
+	void cleanup() {
+		ds_global.cleanup();
+		ds.cleanup();
+		pipeline.cleanup();
+		dsl_global.cleanup();
+		dsl.cleanup();
+	}
 };
 
 // UNIFORMS
@@ -53,20 +66,10 @@ struct Material {
 class SoundMaze : public BaseProject {
 protected:
 
-	int map_width, map_height;
 	Object maze{};
 	Pipe p_graphic;
-
 	stbi_uc* map;
-
-	//Pipeline P_maze;
-	//DescriptorSetLayout DSL_mvp;
-	//DescriptorSetLayout DSL_maze;
-	//DescriptorSet DS_mvp;
-
-	//Model M_maze;
-	//Texture T_maze;
-	//DescriptorSet DS_maze;
+	int map_width, map_height;
 
 	void setWindowParameters() {	
 		windowWidth = 1200;
@@ -76,7 +79,6 @@ protected:
 		
 		uniformBlocksInPool = 3;
 		texturesInPool = 1;
-		//setsInPool = 2;
 		setsInPool = p_graphic.setsInPipe;
 	}
 	
@@ -86,26 +88,16 @@ protected:
 		maze.texture.init(this, TEXTURE_PATH_MAZE);
 		maze.specular_color = glm::vec4(1.0, 1.0, 1.0, 32);
 
-		//DSL_mvp.init(this, { {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} });
 		p_graphic.dsl_global.init(this, { {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} });
 
-		//DSL_maze.init(this, {
-		//maze.dsl.init(this, {
 		p_graphic.dsl.init(this, {
 			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT},
 			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
 			});
 
-		//P_maze.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &DSL_mvp, &DSL_maze });
 		p_graphic.pipeline.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &p_graphic.dsl_global, &p_graphic.dsl });
 
-
-		//DS_mvp.init(this, &DSL_mvp, { {0, UNIFORM, sizeof(ModelViewProjection), nullptr} });
 		p_graphic.ds_global.init(this, &p_graphic.dsl_global, { {0, UNIFORM, sizeof(ModelViewProjection), nullptr} });
-		//M_maze.init(this, MODEL_PATH_MAZE);
-		//T_maze.init();
-		//DS_maze.init(this, &DSL_maze, {
-		//maze.ds.init(this, &maze.dsl, {
 		p_graphic.ds.init(this, &p_graphic.dsl, {
 			{0, UNIFORM, sizeof(Material), nullptr},
 			{1, TEXTURE, 0, &maze.texture},
@@ -113,28 +105,22 @@ protected:
 	}
 		
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-		//VkBuffer vertexBuffers_maze[] = { M_maze.vertexBuffer };
 		VkBuffer vertexBuffers_maze[] = { maze.model.vertexBuffer };
 		VkDeviceSize offsets_maze[] = { 0 };
 
-		//vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, P_maze.graphicsPipeline);
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p_graphic.pipeline.graphicsPipeline);
 		
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-			//P_maze.pipelineLayout, 0, 1, &DS_mvp.descriptorSets[currentImage],
 			p_graphic.pipeline.pipelineLayout, 0, 1, &p_graphic.ds_global.descriptorSets[currentImage],
 			0, nullptr);
 
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_maze, offsets_maze);
-		//vkCmdBindIndexBuffer(commandBuffer, M_maze.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-			//P_maze.pipelineLayout, 1, 1, &DS_maze.descriptorSets[currentImage], 
 			p_graphic.pipeline.pipelineLayout, 1, 1, &p_graphic.ds.descriptorSets[currentImage],
 			0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer, 
-			//static_cast<uint32_t>(M_maze.indices.size()), 1, 0, 0, 0);
 			static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
 	}
 
@@ -268,42 +254,23 @@ protected:
 		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
 		ModelViewProjection mvp = computeMVP(camAng, camPos);
-		//vkMapMemory(device, DS_mvp.uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 		vkMapMemory(device, p_graphic.ds_global.uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 		memcpy(data, &mvp, sizeof(mvp));
-		//vkUnmapMemory(device, DS_mvp.uniformBuffersMemory[0][currentImage]);
 		vkUnmapMemory(device, p_graphic.ds_global.uniformBuffersMemory[0][currentImage]);
 
 
-		//vkMapMemory(device, DS_maze.uniformBuffersMemory[0][currentImage], 0, sizeof(maze), 0, &data);
 		Material m{};
 		m.specular_color = maze.specular_color;
-		//vkMapMemory(device, maze.ds.uniformBuffersMemory[0][currentImage], 0, sizeof(m), 0, &data);
 		vkMapMemory(device, p_graphic.ds.uniformBuffersMemory[0][currentImage], 0, sizeof(m), 0, &data);
 		memcpy(data, &m, sizeof(m));
-		//vkUnmapMemory(device, maze.ds.uniformBuffersMemory[0][currentImage]);
 		vkUnmapMemory(device, p_graphic.ds.uniformBuffersMemory[0][currentImage]);
 
 	}
 
 	void localCleanup() {
 		stbi_image_free(map);
-		//DS_mvp.cleanup();
-		p_graphic.ds_global.cleanup();
-
-		//DS_maze.cleanup();
-		//T_maze.cleanup();
-		//M_maze.cleanup();
-		p_graphic.ds.cleanup();
-		maze.texture.cleanup();
-		maze.model.cleanup();
-
-		//P_maze.cleanup();
-		p_graphic.pipeline.cleanup();
-		//DSL_mvp.cleanup();
-		p_graphic.dsl_global.cleanup();
-		//DSL_maze.cleanup();
-		p_graphic.dsl.cleanup();
+		maze.cleanup();
+		p_graphic.cleanup();
 	}
 
 };
