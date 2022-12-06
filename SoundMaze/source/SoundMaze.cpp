@@ -34,6 +34,19 @@ struct Object {
 	}
 };
 
+struct FloorMap {
+	stbi_uc* img = NULL;
+	int width = 1017;
+	int height = 1017;
+	
+	void loadImg(const char* url) {
+		this->img = stbi_load(url, &this->width, &this->height, NULL, 1);
+	}
+	void cleanup() {
+		stbi_image_free(img);
+	}
+};
+
 struct Pipe {
 	alignas(16) Pipeline pipeline;
 	alignas(16) DescriptorSetLayout dsl_global;
@@ -66,10 +79,10 @@ struct Material {
 class SoundMaze : public BaseProject {
 protected:
 
+	FloorMap map{};
 	Object maze{};
-	Pipe p_graphic;
-	stbi_uc* map;
-	int map_width, map_height;
+	Pipe graphics;
+
 
 	void setWindowParameters() {	
 		windowWidth = 1200;
@@ -79,26 +92,26 @@ protected:
 		
 		uniformBlocksInPool = 3;
 		texturesInPool = 1;
-		setsInPool = p_graphic.setsInPipe;
+		setsInPool = graphics.setsInPipe;
 	}
 	
 	void localInit() {
-		map = stbi_load("textures/high-constrast-maze-map-specular.png", &map_width, &map_height, NULL, 1);
+		map.loadImg("textures/high-constrast-maze-map-specular.png");
 		maze.model.init(this, MODEL_PATH_MAZE);
 		maze.texture.init(this, TEXTURE_PATH_MAZE);
 		maze.specular_color = glm::vec4(1.0, 1.0, 1.0, 32);
 
-		p_graphic.dsl_global.init(this, { {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} });
+		graphics.dsl_global.init(this, { {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} });
 
-		p_graphic.dsl.init(this, {
+		graphics.dsl.init(this, {
 			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT},
 			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
 			});
 
-		p_graphic.pipeline.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &p_graphic.dsl_global, &p_graphic.dsl });
+		graphics.pipeline.init(this, "shaders/vert0.spv", "shaders/frag0.spv", { &graphics.dsl_global, &graphics.dsl });
 
-		p_graphic.ds_global.init(this, &p_graphic.dsl_global, { {0, UNIFORM, sizeof(ModelViewProjection), nullptr} });
-		p_graphic.ds.init(this, &p_graphic.dsl, {
+		graphics.ds_global.init(this, &graphics.dsl_global, { {0, UNIFORM, sizeof(ModelViewProjection), nullptr} });
+		graphics.ds.init(this, &graphics.dsl, {
 			{0, UNIFORM, sizeof(Material), nullptr},
 			{1, TEXTURE, 0, &maze.texture},
 		});
@@ -108,16 +121,16 @@ protected:
 		VkBuffer vertexBuffers_maze[] = { maze.model.vertexBuffer };
 		VkDeviceSize offsets_maze[] = { 0 };
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p_graphic.pipeline.graphicsPipeline);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline.graphicsPipeline);
 		
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-			p_graphic.pipeline.pipelineLayout, 0, 1, &p_graphic.ds_global.descriptorSets[currentImage],
+			graphics.pipeline.pipelineLayout, 0, 1, &graphics.ds_global.descriptorSets[currentImage],
 			0, nullptr);
 
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_maze, offsets_maze);
 		vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-			p_graphic.pipeline.pipelineLayout, 1, 1, &p_graphic.ds.descriptorSets[currentImage],
+			graphics.pipeline.pipelineLayout, 1, 1, &graphics.ds.descriptorSets[currentImage],
 			0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer, 
@@ -134,10 +147,10 @@ protected:
 			double check_x = x + cos(6.2832 * i / (float)checkSteps) * checkRadius;
 			double check_y = y + sin(6.2832 * i / (float)checkSteps) * checkRadius;
 
-			int x_p = map_width - round(fmax(0.0f, fmin(map_width - 1, (- check_x / model_diameter) * map_width)));
-			int y_p = map_height - round(fmax(0.0f, fmin(map_height - 1, (- check_y / model_diameter) * map_height)));
+			int x_p = map.width - round(fmax(0.0f, fmin(map.width - 1, (- check_x / model_diameter) * map.width)));
+			int y_p = map.height - round(fmax(0.0f, fmin(map.height - 1, (- check_y / model_diameter) * map.height)));
 			
-			bool walkable = map[map_width * int(x_p) + int(y_p)] != 0;
+			bool walkable = map.img[map.width * int(x_p) + int(y_p)] != 0;
 			if(!walkable) return false;
 		}
 
@@ -254,23 +267,23 @@ protected:
 		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
 		ModelViewProjection mvp = computeMVP(camAng, camPos);
-		vkMapMemory(device, p_graphic.ds_global.uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
+		vkMapMemory(device, graphics.ds_global.uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 		memcpy(data, &mvp, sizeof(mvp));
-		vkUnmapMemory(device, p_graphic.ds_global.uniformBuffersMemory[0][currentImage]);
+		vkUnmapMemory(device, graphics.ds_global.uniformBuffersMemory[0][currentImage]);
 
 
 		Material m{};
 		m.specular_color = maze.specular_color;
-		vkMapMemory(device, p_graphic.ds.uniformBuffersMemory[0][currentImage], 0, sizeof(m), 0, &data);
+		vkMapMemory(device, graphics.ds.uniformBuffersMemory[0][currentImage], 0, sizeof(m), 0, &data);
 		memcpy(data, &m, sizeof(m));
-		vkUnmapMemory(device, p_graphic.ds.uniformBuffersMemory[0][currentImage]);
+		vkUnmapMemory(device, graphics.ds.uniformBuffersMemory[0][currentImage]);
 
 	}
 
 	void localCleanup() {
-		stbi_image_free(map);
+		map.cleanup();
 		maze.cleanup();
-		p_graphic.cleanup();
+		graphics.cleanup();
 	}
 
 };
