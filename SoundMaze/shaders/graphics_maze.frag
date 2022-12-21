@@ -2,8 +2,8 @@
 
 // lights
 layout(set = 1, binding = 0) uniform Material {
-    vec3 lightPositions;
-    vec3 lightColors;
+    vec3 lightPositions[4];
+    vec3 lightColors[4];
 } l;
 
 // material parameters
@@ -41,17 +41,17 @@ void main()
 	           
     // reflectance equation
     vec3 Lo = vec3(0.0);
-//    for(int i = 0; i < 4; ++i) 
-//    {
+    for(int i = 0; i < 4; ++i) 
+    {
         // calculate per-light radiance
-        //vec3 L = normalize(lightPositions[i] - FragPos);
-        vec3 L = normalize(l.lightPositions - FragPos);
+        vec3 L = normalize(l.lightPositions[i] - FragPos);
+//        vec3 L = normalize(l.lightPositions - FragPos);
         vec3 H = normalize(V + L);
-        //float distance    = length(lightPositions[i] - FragPos);
-        float distance    = length(l.lightPositions - FragPos);
+        float distance    = length(l.lightPositions[i] - FragPos);
+//        float distance    = length(l.lightPositions - FragPos);
         float attenuation = 1.0 / (distance * distance);
-        //vec3 radiance     = lightColors[i] * attenuation;        
-        vec3 radiance     = l.lightColors * attenuation;        
+        vec3 radiance     = l.lightColors[i] * attenuation;        
+//        vec3 radiance     = l.lightColors * attenuation;        
         
         // cook-torrance brdf
         float NDF = DistributionGGX(N, H, roughness);        
@@ -69,7 +69,7 @@ void main()
         // add to outgoing radiance Lo
         float NdotL = max(dot(N, L), 0.0);                
         Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
-//    }   
+    }   
   
     vec3 ambient = vec3(0.03) * albedo * ao;
     vec3 color = ambient + Lo;

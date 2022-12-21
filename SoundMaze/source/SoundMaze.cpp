@@ -3,6 +3,7 @@
  * #ok Fix the map
  * #ok Correctly implement collisions
  * #ok Fix shaders
+ * #ok Add lights
  * # Add treasures
  * #ok Improve textures
  * #ok Fix map to have it easier to work with
@@ -12,11 +13,19 @@
 #include "SoundMaze.hpp"
 
 const std::string MODEL_PATH_MAZE = "models/maze_translated.obj";
+const std::string MODEL_PATH_TREASURE = "models/icosphere_translated.obj";
+
 const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze_albedo.jpg";
 const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze_metallic.jpg";
 const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze_roughness.jpg";
 const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze_ao.jpg";
 
+const std::string TEXTURE_PATH_TREASURE_base = "textures/treasure_baseColor.png";
+const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
+const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
+const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
+
+constexpr float NUM_TREASURES = 1;
 constexpr float ROT_SPEED = glm::radians(60.0f);
 const float MOVE_SPEED = 0.5f;
 const float MOUSE_RES = 500.0f;
@@ -28,20 +37,17 @@ constexpr float MAX_DOWN_ANGLE = glm::radians(-70.0f);
 
 struct Object {
 	alignas(16) Model model;
-
 	alignas(16) Texture albedo_map;
 	alignas(16) Texture metallic_map;
 	alignas(16) Texture roughness_map;
-	alignas(16) Texture ao_map;
-
-	alignas(16) glm::vec4 specular_color;
-
+	alignas(16) Texture light_map; // ao or emissive
+	
 	void cleanup() {
 		model.cleanup();
 		albedo_map.cleanup();
 		metallic_map.cleanup();
 		roughness_map.cleanup();
-		ao_map.cleanup();
+		light_map.cleanup();
 	}
 };
 
@@ -67,17 +73,16 @@ struct FloorMap {
 struct Pipe {
 	alignas(16) Pipeline pipeline {};
 	alignas(16) DescriptorSetLayout dsl_global;
+	alignas(16) DescriptorSetLayout dsl_set;
 	alignas(16) DescriptorSet ds_global;
-	alignas(16) DescriptorSetLayout dsl_maze;
-	alignas(16) DescriptorSet ds_maze;
-	alignas(16) int setsInPipe = 2;
+	alignas(16) DescriptorSet ds_set;
+	alignas(16) std::vector <DescriptorSetLayout> dsls;
+	alignas(16) std::vector <DescriptorSet> dss;
 
 	void cleanup() {
-		ds_global.cleanup();
-		ds_maze.cleanup();
 		pipeline.cleanup();
-		dsl_global.cleanup();
-		dsl_maze.cleanup();
+		for (auto& dsl : dsls) { dsl.cleanup(); }
+		for (auto& ds : dss) { ds.cleanup(); }
 	}
 };
 
@@ -88,22 +93,32 @@ struct ModelViewProjection {
 	alignas(16) glm::mat4 proj;
 };
 
-struct Material {
-	alignas(16) glm::vec4 specular_color;
+struct Lights {
+	glm::vec3 lightPositions[4] = { 
+		glm::vec3(-5 - 0.1, 0.1, -5 - 0.1),
+		glm::vec3(-5 - 0.1, 0.1, -5 + 0.1),
+		glm::vec3(-5 + 0.1, 0.1, -5 - 0.1),
+		glm::vec3(-5 + 0.1, 0.1, -5 + 0.1)
+	};
+	
+	glm::vec3 lightColors[4] = {
+		glm::vec3(1, 0, 0),
+		glm::vec3(0, 1, 0),
+		glm::vec3(0, 0, 1),
+		glm::vec3(1, 1, 1)
+	};
 };
 
-struct Lights {
-	glm::vec3 lightPositions = glm::vec3(-5, 0.1, -5);
-	glm::vec3 lightColors = glm::vec3(1.0, 1.0, 1.0);
-};
-// UNIFORMS
- 
 class SoundMaze : public BaseProject {
 protected:
 
 	FloorMap map{};
+	
 	Object maze{};
-	Pipe graphics;
+	Object treasure{};
+
+	Pipe mazePipeline{};
+	Pipe treasuresPipeline{};
 
 	void setWindowParameters() {	
 		windowWidth = 1200;
@@ -111,70 +126,179 @@ protected:
 		windowTitle = "Inside the Sound Maze...";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
-		uniformBlocksInPool = 3;
-		texturesInPool = 4;
-		setsInPool = graphics.setsInPipe;
+		// Non può essere spostata dentro init
+		uniformBlocksInPool = 2 + 1 + NUM_TREASURES; // 2 global + 1 per maze + 1 per treasure
+		texturesInPool = 4 * 1 + 4 * NUM_TREASURES; // 4 for maze + 4 for each treasure
+		setsInPool = 2 + 1 + NUM_TREASURES; // 2 global + 1 per maze + 1 per treasure
 	}
 	
 	void localInit() {
 
-		map.loadImg("textures/high-constrast-maze-map-specular.png");
+		// Load the map
+		{
+			map.loadImg("textures/high-constrast-maze-map-specular.png");
+			assert(map.width > 0);
+			assert(map.height > 0);
+		}
+
+		// Load the models
+		{
+			maze.model.init(this, MODEL_PATH_MAZE);
+			maze.albedo_map.init(this, TEXTURE_PATH_MAZE_Alb);
+			maze.metallic_map.init(this, TEXTURE_PATH_MAZE_Ref);
+			maze.roughness_map.init(this, TEXTURE_PATH_MAZE_Rou);
+			maze.light_map.init(this, TEXTURE_PATH_MAZE_Ao);
+			assert(maze.model.indices.size() > 0);
+		}
+		{
+			treasure.model.init(this, MODEL_PATH_TREASURE);
+			treasure.albedo_map.init(this, TEXTURE_PATH_TREASURE_base);
+			treasure.metallic_map.init(this, TEXTURE_PATH_TREASURE_base);
+			treasure.roughness_map.init(this, TEXTURE_PATH_TREASURE_base);
+			treasure.light_map.init(this, TEXTURE_PATH_TREASURE_base);
+			assert(treasure.model.indices.size() > 0);
+		}
 		
-		maze.model.init(this, MODEL_PATH_MAZE);
+		// Initialize Pipelines
+		{	
+			// Maze	
+			mazePipeline.dsls.push_back(DescriptorSetLayout{});
+			mazePipeline.dsls[0].init(this, {
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} // MVP
+				});
 
-		maze.albedo_map.init(this, TEXTURE_PATH_MAZE_Alb);
-		maze.metallic_map.init(this, TEXTURE_PATH_MAZE_Ref);
-		maze.roughness_map.init(this, TEXTURE_PATH_MAZE_Rou);
-		maze.ao_map.init(this, TEXTURE_PATH_MAZE_Ao);
+			mazePipeline.dsls.push_back(DescriptorSetLayout{});
+			mazePipeline.dsls[1].init(this, {
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Lights 
+				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Albedo
+				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Metallic
+				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Roughness
+				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // AO
+				});
 
-		maze.specular_color = glm::vec4(1.0, 1.0, 1.0, 32);
+			mazePipeline.pipeline.init(this, 
+				"shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv", 
+				{ 
+					&mazePipeline.dsls[0],
+					&mazePipeline.dsls[1]
+				});
+			
+			mazePipeline.dss.push_back(DescriptorSet{});
+			mazePipeline.dss[0].init(this, &mazePipeline.dsls[0], {
+				{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+				});
+			
+			mazePipeline.dss.push_back(DescriptorSet{});
+			mazePipeline.dss[1].init(this, &mazePipeline.dsls[1], {
+				{0, UNIFORM, sizeof(Lights), nullptr},
+				{1, TEXTURE, 0, &maze.albedo_map},
+				{2, TEXTURE, 0, &maze.metallic_map},
+				{3, TEXTURE, 0, &maze.roughness_map},
+				{4, TEXTURE, 0, &maze.light_map},
+				});
+			
+			std::cout << "Maze Pipeline Initialized" << std::endl;
+		}
+		{
+			// Treasures
+			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
+			treasuresPipeline.dsls[0].init(this, {
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} // MVP
+				});
+			
+			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
+			treasuresPipeline.dsls[1].init(this, {
+				//{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Albedo
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT},
+				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
+				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
+				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
+				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
+				});
+			
+			treasuresPipeline.pipeline.init(this,
+				//"shaders/graphics_treasures_vert.spv", "shaders/graphics_treasures_frag.spv",
+				"shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv",
+				{
+					&treasuresPipeline.dsls[0],
+					&treasuresPipeline.dsls[1]
+				});
 
-		graphics.dsl_global.init(this, {
-			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} 
-		});
+			treasuresPipeline.dss.push_back(DescriptorSet{});
+			treasuresPipeline.dss[0].init(this, &treasuresPipeline.dsls[0], {
+				{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+				});
 
-		graphics.dsl_maze.init(this, {
-			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT},
-			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-			{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-			{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-			{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-		});
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				treasuresPipeline.dss.push_back(DescriptorSet{});
+				treasuresPipeline.dss[1 + i].init(this, &treasuresPipeline.dsls[1], {
+					//{0, TEXTURE, 0, &maze.albedo_map},
+					{0, UNIFORM, sizeof(Lights), nullptr},
+					{1, TEXTURE, 0, &treasure.albedo_map},
+					{2, TEXTURE, 0, &treasure.metallic_map},
+					{3, TEXTURE, 0, &treasure.roughness_map},
+					{4, TEXTURE, 0, &treasure.light_map},
+					});
+			}
 
-		graphics.pipeline.init(this, "shaders/graphics_vert.spv", "shaders/graphics_frag.spv", { &graphics.dsl_global, &graphics.dsl_maze });
+			std::cout << "Treasures Pipeline Initialized" << std::endl;
+		}
 		
-		graphics.ds_global.init(this, &graphics.dsl_global, { 
-			{0, UNIFORM, sizeof(ModelViewProjection), 
-			nullptr} 
-		});
-		
-		graphics.ds_maze.init(this, &graphics.dsl_maze, {
-			{0, UNIFORM, sizeof(Lights), nullptr},
-			{1, TEXTURE, 0, &maze.albedo_map},
-			{2, TEXTURE, 0, &maze.metallic_map},
-			{3, TEXTURE, 0, &maze.roughness_map},
-			{4, TEXTURE, 0, &maze.ao_map},
-		});
 	}
 		
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-		VkBuffer vertexBuffers_maze[] = { maze.model.vertexBuffer };
-		VkDeviceSize offsets_maze[] = { 0 };
-
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline.graphicsPipeline);
+	
+		int firstSet;
+		int descriptorSetCount = 1;
 		
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-			graphics.pipeline.pipelineLayout, 0, 1, &graphics.ds_global.descriptorSets[currentImage],
-			0, nullptr);
+		// Graphics pipelines
+		{
+			// Maze
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mazePipeline.pipeline.graphicsPipeline);
+			
+			firstSet = 0;
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
+				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
+				0, nullptr);
+		
+			firstSet = 1;
+			VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
+				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
+				0, nullptr);
+		
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
+		}
+				
+		{
+			// Treasures
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
 
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers_maze, offsets_maze);
-		vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-			graphics.pipeline.pipelineLayout, 1, 1, &graphics.ds_maze.descriptorSets[currentImage],
-			0, nullptr);
+			firstSet = 0;
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
+				&treasuresPipeline.dss[firstSet].descriptorSets[currentImage],
+				0, nullptr);
 
-		vkCmdDrawIndexed(commandBuffer, 
-			static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
+			firstSet = 1;
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				VkBuffer vertexBuffers[] = { treasure.model.vertexBuffer };
+				VkDeviceSize offsets[] = { 0 };
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+				vkCmdBindIndexBuffer(commandBuffer, treasure.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
+					&treasuresPipeline.dss[firstSet].descriptorSets[currentImage],
+					0, nullptr);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
+			}
+		}
+		
 	}
 
 	bool canStep(float x, float y) {
@@ -195,6 +319,8 @@ protected:
 		return true;
 	}
 
+	
+	
 	void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
 		static double old_xpos = 0, old_ypos = 0;
 		double xpos, ypos;
@@ -230,6 +356,8 @@ protected:
 		}
 	}
 
+	
+	
 	void updateCameraPosition(glm::vec3* CamPos, float deltaT, float MOVE_SPEED, glm::vec3 CamAng) {
 		
 		glm::vec3 oldCamPos = *CamPos;
@@ -259,8 +387,10 @@ protected:
 		*CamPos = newCamPos;
 	}
 
-	ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos) {
-		
+	
+	
+	ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
+
 		ModelViewProjection mvp{};
 		glm::mat3 CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.y, glm::vec3(0.0f, 1.0f, 0.0f))) *
 			glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.x, glm::vec3(1.0f, 0.0f, 0.0f))) *
@@ -272,8 +402,8 @@ protected:
 		mvp.model = glm::translate(
 			glm::rotate(
 				glm::translate(
-					model, 
-					glm::vec3(-5, 0, -5)
+					model,
+					glm::vec3(-5, 0, -5) - pos
 				), 
 				glm::radians(90.0f), 
 				glm::vec3(0, 1, 0)
@@ -304,28 +434,43 @@ protected:
 		static glm::vec3 camPos = glm::vec3(-5.0f, .1f, -5.0f);
 		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
-		ModelViewProjection mvp = computeMVP(camAng, camPos);
-		vkMapMemory(device, graphics.ds_global.uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
-		memcpy(data, &mvp, sizeof(mvp));
-		vkUnmapMemory(device, graphics.ds_global.uniformBuffersMemory[0][currentImage]);
-
-		//Material m{};
-		//m.specular_color = maze.specular_color;
-		//vkMapMemory(device, graphics.ds_maze.uniformBuffersMemory[0][currentImage], 0, sizeof(m), 0, &data);
-		//memcpy(data, &m, sizeof(m));
-		//vkUnmapMemory(device, graphics.ds_maze.uniformBuffersMemory[0][currentImage]);
-
+		
+		ModelViewProjection mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.5f, 0.0f));
 		Lights l;
-		vkMapMemory(device, graphics.ds_maze.uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
-		memcpy(data, &l, sizeof(l));
-		vkUnmapMemory(device, graphics.ds_maze.uniformBuffersMemory[0][currentImage]);
+
+		// Maze Pipeline
+		{
+			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
+			memcpy(data, &mvp, sizeof(mvp));
+			vkUnmapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage]);
+		
+			vkMapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
+			memcpy(data, &l, sizeof(l));
+			vkUnmapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage]);
+		}
+
+		// Treasures Pipeline
+		mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.3f, 0.0f));
+		{
+			vkMapMemory(device, treasuresPipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
+			memcpy(data, &mvp, sizeof(mvp));
+			vkUnmapMemory(device, treasuresPipeline.dss[0].uniformBuffersMemory[0][currentImage]);
+			
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				vkMapMemory(device, treasuresPipeline.dss[1 + i].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
+				memcpy(data, &l, sizeof(l));
+				vkUnmapMemory(device, treasuresPipeline.dss[1 + i].uniformBuffersMemory[0][currentImage]);
+			}
+		}
 
 	}
 
 	void localCleanup() {
 		map.cleanup();
 		maze.cleanup();
-		graphics.cleanup();
+		treasure.cleanup();
+		//mazePipeline.cleanup();
+		treasuresPipeline.cleanup();
 	}
 
 };
