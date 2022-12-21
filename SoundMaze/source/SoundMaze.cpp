@@ -25,7 +25,7 @@ const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
 const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
 const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
 
-constexpr float NUM_TREASURES = 1;
+constexpr float NUM_TREASURES = 5;
 constexpr float ROT_SPEED = glm::radians(60.0f);
 const float MOVE_SPEED = 0.5f;
 const float MOUSE_RES = 500.0f;
@@ -127,9 +127,9 @@ protected:
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
 		// Non può essere spostata dentro init
-		uniformBlocksInPool = 2 + 1 + NUM_TREASURES; // 2 global + 1 per maze + 1 per treasure
+		uniformBlocksInPool = 2 + 2 * NUM_TREASURES; // 2 per maze + 1 per treasure
 		texturesInPool = 4 * 1 + 4 * NUM_TREASURES; // 4 for maze + 4 for each treasure
-		setsInPool = 2 + 1 + NUM_TREASURES; // 2 global + 1 per maze + 1 per treasure
+		setsInPool = 2 + 2 * NUM_TREASURES; // 2 per maze + 2 per treasure
 	}
 	
 	void localInit() {
@@ -208,7 +208,6 @@ protected:
 			
 			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
 			treasuresPipeline.dsls[1].init(this, {
-				//{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Albedo
 				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT},
 				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
 				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
@@ -217,21 +216,22 @@ protected:
 				});
 			
 			treasuresPipeline.pipeline.init(this,
-				//"shaders/graphics_treasures_vert.spv", "shaders/graphics_treasures_frag.spv",
 				"shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv",
 				{
 					&treasuresPipeline.dsls[0],
 					&treasuresPipeline.dsls[1]
 				});
 
-			treasuresPipeline.dss.push_back(DescriptorSet{});
-			treasuresPipeline.dss[0].init(this, &treasuresPipeline.dsls[0], {
-				{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
-				});
-
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				treasuresPipeline.dss.push_back(DescriptorSet{});
-				treasuresPipeline.dss[1 + i].init(this, &treasuresPipeline.dsls[1], {
+				treasuresPipeline.dss[i].init(this, &treasuresPipeline.dsls[0], {
+					{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+					});
+			}
+			
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				treasuresPipeline.dss.push_back(DescriptorSet{});
+				treasuresPipeline.dss[NUM_TREASURES + i].init(this, &treasuresPipeline.dsls[1], {
 					//{0, TEXTURE, 0, &maze.albedo_map},
 					{0, UNIFORM, sizeof(Lights), nullptr},
 					{1, TEXTURE, 0, &treasure.albedo_map},
@@ -240,7 +240,7 @@ protected:
 					{4, TEXTURE, 0, &treasure.light_map},
 					});
 			}
-
+			
 			std::cout << "Treasures Pipeline Initialized" << std::endl;
 		}
 		
@@ -279,26 +279,26 @@ protected:
 			// Treasures
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
 
-			firstSet = 0;
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-				treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
-				&treasuresPipeline.dss[firstSet].descriptorSets[currentImage],
-				0, nullptr);
-
-			firstSet = 1;
 			for (int i = 0; i < NUM_TREASURES; i++) {
+				firstSet = 0;
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
+					&treasuresPipeline.dss[i].descriptorSets[currentImage],
+					0, nullptr);
+				
+				
+				firstSet = 1;
 				VkBuffer vertexBuffers[] = { treasure.model.vertexBuffer };
 				VkDeviceSize offsets[] = { 0 };
 				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 				vkCmdBindIndexBuffer(commandBuffer, treasure.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
-					&treasuresPipeline.dss[firstSet].descriptorSets[currentImage],
+					&treasuresPipeline.dss[NUM_TREASURES + i].descriptorSets[currentImage],
 					0, nullptr);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
 			}
 		}
-		
 	}
 
 	bool canStep(float x, float y) {
@@ -450,16 +450,16 @@ protected:
 		}
 
 		// Treasures Pipeline
-		mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.3f, 0.0f));
 		{
-			vkMapMemory(device, treasuresPipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
-			memcpy(data, &mvp, sizeof(mvp));
-			vkUnmapMemory(device, treasuresPipeline.dss[0].uniformBuffersMemory[0][currentImage]);
-			
 			for (int i = 0; i < NUM_TREASURES; i++) {
-				vkMapMemory(device, treasuresPipeline.dss[1 + i].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
+				mvp = computeMVP(camAng, camPos, glm::vec3(0.1f * i, 0.3f, 0.0f * i));
+				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
+				memcpy(data, &mvp, sizeof(mvp));
+				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
+			
+				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
 				memcpy(data, &l, sizeof(l));
-				vkUnmapMemory(device, treasuresPipeline.dss[1 + i].uniformBuffersMemory[0][currentImage]);
+				vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);
 			}
 		}
 
@@ -469,7 +469,7 @@ protected:
 		map.cleanup();
 		maze.cleanup();
 		treasure.cleanup();
-		//mazePipeline.cleanup();
+		mazePipeline.cleanup();
 		treasuresPipeline.cleanup();
 	}
 
