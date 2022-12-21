@@ -4,7 +4,7 @@
  * #ok Correctly implement collisions
  * #ok Fix shaders
  * #ok Add lights
- * # Add treasures
+ * #ok Add treasures
  * #ok Improve textures
  * #ok Fix map to have it easier to work with
  * # Add sound
@@ -25,7 +25,7 @@ const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
 const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
 const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
 
-constexpr float NUM_TREASURES = 5;
+constexpr float NUM_TREASURES = 10;
 constexpr float ROT_SPEED = glm::radians(60.0f);
 const float MOVE_SPEED = 0.5f;
 const float MOUSE_RES = 500.0f;
@@ -113,12 +113,13 @@ class SoundMaze : public BaseProject {
 protected:
 
 	FloorMap map{};
-	
 	Object maze{};
 	Object treasure{};
 
 	Pipe mazePipeline{};
 	Pipe treasuresPipeline{};
+	
+	std::vector <glm::vec3> translations;
 
 	void setWindowParameters() {	
 		windowWidth = 1200;
@@ -128,7 +129,7 @@ protected:
 		
 		// Non può essere spostata dentro init
 		uniformBlocksInPool = 2 + 2 * NUM_TREASURES; // 2 per maze + 1 per treasure
-		texturesInPool = 4 * 1 + 4 * NUM_TREASURES; // 4 for maze + 4 for each treasure
+		texturesInPool = 4 + 4 * NUM_TREASURES; // 4 per maze + 4 per treasure
 		setsInPool = 2 + 2 * NUM_TREASURES; // 2 per maze + 2 per treasure
 	}
 	
@@ -137,6 +138,7 @@ protected:
 		// Load the map
 		{
 			map.loadImg("textures/high-constrast-maze-map-specular.png");
+			generateRandomTranslations();
 			assert(map.width > 0);
 			assert(map.height > 0);
 		}
@@ -280,6 +282,7 @@ protected:
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
 
 			for (int i = 0; i < NUM_TREASURES; i++) {
+				
 				firstSet = 0;
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
@@ -297,29 +300,103 @@ protected:
 					&treasuresPipeline.dss[NUM_TREASURES + i].descriptorSets[currentImage],
 					0, nullptr);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
+				
 			}
 		}
 	}
 
+	void generateRandomTranslations() {
+		
+		//std::vector <glm::vec3> availablePositions;
+		//	
+		//for (int i = 0; i < map.width; i++) {
+		//	for (int j = 0; j < map.height; j++) {
+		//		int pix = map.img[map.width * i + j];
+		//		if (pix == 0) {
+		//			const float checkRadius = 1.0f;
+		//			const int checkStep = 1;
+		//			bool valid = true;
+		//			for (int k = -checkRadius; k < checkRadius; k += checkStep) {
+		//				for (int l = -checkRadius; l < checkRadius; l += checkStep) {
+		//					if (map.img[map.width * (i + k) + (j + l)] != 0) {
+		//						valid = false;
+		//						break;
+		//					}
+		//				}
+		//			}
+		//			if (valid) {
+		//				glm::vec2 pos = mapToMaze(i, j);
+		//				availablePositions.push_back(glm::vec3(pos.x, 0.0f, pos.y));
+		//			}
+		//		}
+		//	}
+		//}
+		//
+		//for (int i = 0; i < NUM_TREASURES; i++) {
+		//	int index = rand() % availablePositions.size();
+		//	std::cout << "Treasure " << i << " at " << availablePositions[index].x << ", " << availablePositions[index].z << std::endl;
+		//	translations[i] = - availablePositions[index];
+		//	availablePositions.erase(availablePositions.begin() + index);
+		//}
+		
+		static const float model_diameter = 10.0f;
+		glm::vec2 candidate{};
+		while (translations.size() < NUM_TREASURES) {
+
+			candidate.x = rand() * model_diameter / RAND_MAX - model_diameter / 2.0f;
+			candidate.y = rand() * model_diameter / RAND_MAX - model_diameter / 2.0f;
+
+			glm::vec2 mapPos = mazeToMap(candidate.x, candidate.y);
+			bool valid = true;
+			if (mapPos.x < 0 || mapPos.x >= map.width || mapPos.y < 0 || mapPos.y >= map.height) {
+				valid = false;
+			}
+			else {
+				if (map.img[map.width * int(mapPos.x) + int(mapPos.y)] != 0) {
+					valid = false;
+				}
+			}
+			
+			if (valid) {
+				translations.push_back(glm::vec3(-candidate.x, 0.0f, -candidate.y));
+			}
+		}
+		
+		std::cout << "Generated " << translations.size() << " treasure positions" << std::endl;
+		for (glm::vec2 pos : translations) {
+			std::cout << pos.x << ", " << pos.y << std::endl;
+		}
+	}
+	
+	glm::vec2 mazeToMap(float x_maze, float y_maze) {
+		static const float model_diameter = 10.0f;
+		int x_p = map.width - round(fmax(0.0f, fmin(map.width - 1, (-x_maze / model_diameter) * map.width)));
+		int y_p = map.height - round(fmax(0.0f, fmin(map.height - 1, (-y_maze / model_diameter) * map.height)));
+		return glm::vec2(x_p, y_p);
+	}
+
+	glm::vec2 mapToMaze(float x_p, float y_p) {
+		static const float model_diameter = 10.0f;
+		//int x_maze = round(fmax(0.0f, fmin(map.width - 1, (-x_p / map.width) * model_diameter)));
+		//int y_maze = round(fmax(0.0f, fmin(map.height - 1, (-y_p / map.height) * model_diameter)));
+		float x_maze = -model_diameter / map.width * fmax(map.width, fmin(0.0f, map.width - x_p));
+		float y_maze = -model_diameter / map.height * fmax(map.height, fmin(0.0f, map.height - x_p));
+		return glm::vec2(x_maze, y_maze);
+	}
+	
+	
 	bool canStep(float x, float y) {
 		static const float checkRadius = 0.1;
-		static const int checkSteps = 4;
-		static const float model_diameter = 10.0f;
-
+		static const int checkSteps = 8;
 		for (int i = 0; i < checkSteps; i++) {
 			double check_x = x + cos(6.2832 * i / (float)checkSteps) * checkRadius;
 			double check_y = y + sin(6.2832 * i / (float)checkSteps) * checkRadius;
-
-			int x_p = map.width - round(fmax(0.0f, fmin(map.width - 1, (- check_x / model_diameter) * map.width)));
-			int y_p = map.height - round(fmax(0.0f, fmin(map.height - 1, (- check_y / model_diameter) * map.height)));
-			
-			bool walkable = map.img[map.width * int(x_p) + int(y_p)] != 0;
+			glm::vec2 map_pos = mazeToMap(check_x, check_y);
+			bool walkable = map.img[map.width * int(map_pos.x) + int(map_pos.y)] != 0;
 			if(!walkable) return false;
 		}
 		return true;
 	}
-
-	
 	
 	void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
 		static double old_xpos = 0, old_ypos = 0;
@@ -355,8 +432,6 @@ protected:
 			}
 		}
 	}
-
-	
 	
 	void updateCameraPosition(glm::vec3* CamPos, float deltaT, float MOVE_SPEED, glm::vec3 CamAng) {
 		
@@ -386,10 +461,8 @@ protected:
 		}
 		*CamPos = newCamPos;
 	}
-
 	
-	
-	ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
+	ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 translation = glm::vec3(0.0f)) {
 
 		ModelViewProjection mvp{};
 		glm::mat3 CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.y, glm::vec3(0.0f, 1.0f, 0.0f))) *
@@ -403,7 +476,7 @@ protected:
 			glm::rotate(
 				glm::translate(
 					model,
-					glm::vec3(-5, 0, -5) - pos
+					glm::vec3(-5, 0, -5) + translation
 				), 
 				glm::radians(90.0f), 
 				glm::vec3(0, 1, 0)
@@ -435,7 +508,7 @@ protected:
 		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
 		
-		ModelViewProjection mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.5f, 0.0f));
+		ModelViewProjection mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, -0.5f, 0.0f));
 		Lights l;
 
 		// Maze Pipeline
@@ -452,7 +525,7 @@ protected:
 		// Treasures Pipeline
 		{
 			for (int i = 0; i < NUM_TREASURES; i++) {
-				mvp = computeMVP(camAng, camPos, glm::vec3(0.1f * i, 0.3f, 0.0f * i));
+				mvp = computeMVP(camAng, camPos, translations[i]);
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 				memcpy(data, &mvp, sizeof(mvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
