@@ -316,10 +316,7 @@ protected:
 			candidate.x = (float)(rand() % 1000) * (model_diameter / 1000) - (model_diameter / 2.0f);
 			candidate.y = (float)(rand() % 1000) * (model_diameter / 1000) - (model_diameter / 2.0f);
 
-			glm::vec2 mapPos = mazeToMap(candidate.x, candidate.y);
-			if (mapPos.x < 0 || mapPos.x >= map.width || 
-				mapPos.y < 0 || mapPos.y >= map.height ||
-				map.img[map.width * (int)mapPos.x + (int)mapPos.y] != 0) {
+			if (map.img[mazeToMap(candidate.x, candidate.y)] != 0) {
 				continue;
 			}
 			translations.push_back(glm::vec3(-candidate.x, 0.0f, -candidate.y));
@@ -332,11 +329,12 @@ protected:
 		}
 	}
 	
-	glm::vec2 mazeToMap(float x_maze, float y_maze) {
+	int mazeToMap(float x_maze, float y_maze) {
 		static const float model_diameter = 10.0f;
 		int x_p = map.width - round(fmax(0.0f, fmin(map.width - 1, (-x_maze / model_diameter) * map.width)));
 		int y_p = map.height - round(fmax(0.0f, fmin(map.height - 1, (-y_maze / model_diameter) * map.height)));
-		return glm::vec2(x_p, y_p);
+		int map_index = map.width * y_p + x_p;
+		return map_index;
 	}
 	
 	bool canStep(float x, float y) {
@@ -345,9 +343,7 @@ protected:
 		for (int i = 0; i < checkSteps; i++) {
 			double check_x = x + cos(6.2832 * i / (float)checkSteps) * checkRadius;
 			double check_y = y + sin(6.2832 * i / (float)checkSteps) * checkRadius;
-			glm::vec2 map_pos = mazeToMap(check_x, check_y);
-			bool walkable = map.img[map.width * int(map_pos.y) + int(map_pos.x)] != 0;
-			if(!walkable) return false;
+			if(map.img[mazeToMap(check_x, check_y)] == 0) return false;
 		}
 		return true;
 	}
