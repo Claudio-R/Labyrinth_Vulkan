@@ -307,64 +307,28 @@ protected:
 
 	void generateRandomTranslations() {
 		
-		//std::vector <glm::vec3> availablePositions;
-		//	
-		//for (int i = 0; i < map.width; i++) {
-		//	for (int j = 0; j < map.height; j++) {
-		//		int pix = map.img[map.width * i + j];
-		//		if (pix == 0) {
-		//			const float checkRadius = 1.0f;
-		//			const int checkStep = 1;
-		//			bool valid = true;
-		//			for (int k = -checkRadius; k < checkRadius; k += checkStep) {
-		//				for (int l = -checkRadius; l < checkRadius; l += checkStep) {
-		//					if (map.img[map.width * (i + k) + (j + l)] != 0) {
-		//						valid = false;
-		//						break;
-		//					}
-		//				}
-		//			}
-		//			if (valid) {
-		//				glm::vec2 pos = mapToMaze(i, j);
-		//				availablePositions.push_back(glm::vec3(pos.x, 0.0f, pos.y));
-		//			}
-		//		}
-		//	}
-		//}
-		//
-		//for (int i = 0; i < NUM_TREASURES; i++) {
-		//	int index = rand() % availablePositions.size();
-		//	std::cout << "Treasure " << i << " at " << availablePositions[index].x << ", " << availablePositions[index].z << std::endl;
-		//	translations[i] = - availablePositions[index];
-		//	availablePositions.erase(availablePositions.begin() + index);
-		//}
-		
 		static const float model_diameter = 10.0f;
 		glm::vec2 candidate{};
+		
+		srand(time(NULL));
 		while (translations.size() < NUM_TREASURES) {
 
-			candidate.x = rand() * model_diameter / RAND_MAX - model_diameter / 2.0f;
-			candidate.y = rand() * model_diameter / RAND_MAX - model_diameter / 2.0f;
+			candidate.x = (float)(rand() % 1000) * (model_diameter / 1000) - (model_diameter / 2.0f);
+			candidate.y = (float)(rand() % 1000) * (model_diameter / 1000) - (model_diameter / 2.0f);
 
 			glm::vec2 mapPos = mazeToMap(candidate.x, candidate.y);
-			bool valid = true;
-			if (mapPos.x < 0 || mapPos.x >= map.width || mapPos.y < 0 || mapPos.y >= map.height) {
-				valid = false;
+			if (mapPos.x < 0 || mapPos.x >= map.width || 
+				mapPos.y < 0 || mapPos.y >= map.height ||
+				map.img[map.width * (int)mapPos.x + (int)mapPos.y] != 0) {
+				continue;
 			}
-			else {
-				if (map.img[map.width * int(mapPos.x) + int(mapPos.y)] != 0) {
-					valid = false;
-				}
-			}
+			translations.push_back(glm::vec3(-candidate.x, 0.0f, -candidate.y));
 			
-			if (valid) {
-				translations.push_back(glm::vec3(-candidate.x, 0.0f, -candidate.y));
-			}
 		}
 		
 		std::cout << "Generated " << translations.size() << " treasure positions" << std::endl;
-		for (glm::vec2 pos : translations) {
-			std::cout << pos.x << ", " << pos.y << std::endl;
+		for (glm::vec3 pos : translations) {
+			std::cout << pos.x << ", " << pos.z << std::endl;
 		}
 	}
 	
@@ -375,14 +339,14 @@ protected:
 		return glm::vec2(x_p, y_p);
 	}
 
-	glm::vec2 mapToMaze(float x_p, float y_p) {
-		static const float model_diameter = 10.0f;
-		//int x_maze = round(fmax(0.0f, fmin(map.width - 1, (-x_p / map.width) * model_diameter)));
-		//int y_maze = round(fmax(0.0f, fmin(map.height - 1, (-y_p / map.height) * model_diameter)));
-		float x_maze = -model_diameter / map.width * fmax(map.width, fmin(0.0f, map.width - x_p));
-		float y_maze = -model_diameter / map.height * fmax(map.height, fmin(0.0f, map.height - x_p));
-		return glm::vec2(x_maze, y_maze);
-	}
+	//glm::vec2 mapToMaze(float x_p, float y_p) {
+	//	static const float model_diameter = 10.0f;
+	//	int x_maze = round(fmax(0.0f, fmin(map.width - 1, (-x_p / map.width) * model_diameter)));
+	//	int y_maze = round(fmax(0.0f, fmin(map.height - 1, (-y_p / map.height) * model_diameter)));
+	//	//float x_maze = -model_diameter / map.width * fmax(map.width, fmin(0.0f, map.width - x_p));
+	//	//float y_maze = -model_diameter / map.height * fmax(map.height, fmin(0.0f, map.height - x_p));
+	//	return glm::vec2(x_maze, y_maze);
+	//}
 	
 	
 	bool canStep(float x, float y) {
