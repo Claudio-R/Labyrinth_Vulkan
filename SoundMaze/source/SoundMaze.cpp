@@ -137,7 +137,7 @@ protected:
 
 		// Load the map
 		{
-			map.loadImg("textures/high-constrast-maze-map-specular.png");
+			map.loadImg("textures/high-constrast-maze-map.png");
 			generateRandomTranslations();
 			assert(map.width > 0);
 			assert(map.height > 0);
@@ -338,16 +338,6 @@ protected:
 		int y_p = map.height - round(fmax(0.0f, fmin(map.height - 1, (-y_maze / model_diameter) * map.height)));
 		return glm::vec2(x_p, y_p);
 	}
-
-	//glm::vec2 mapToMaze(float x_p, float y_p) {
-	//	static const float model_diameter = 10.0f;
-	//	int x_maze = round(fmax(0.0f, fmin(map.width - 1, (-x_p / map.width) * model_diameter)));
-	//	int y_maze = round(fmax(0.0f, fmin(map.height - 1, (-y_p / map.height) * model_diameter)));
-	//	//float x_maze = -model_diameter / map.width * fmax(map.width, fmin(0.0f, map.width - x_p));
-	//	//float y_maze = -model_diameter / map.height * fmax(map.height, fmin(0.0f, map.height - x_p));
-	//	return glm::vec2(x_maze, y_maze);
-	//}
-	
 	
 	bool canStep(float x, float y) {
 		static const float checkRadius = 0.1;
@@ -356,7 +346,7 @@ protected:
 			double check_x = x + cos(6.2832 * i / (float)checkSteps) * checkRadius;
 			double check_y = y + sin(6.2832 * i / (float)checkSteps) * checkRadius;
 			glm::vec2 map_pos = mazeToMap(check_x, check_y);
-			bool walkable = map.img[map.width * int(map_pos.x) + int(map_pos.y)] != 0;
+			bool walkable = map.img[map.width * int(map_pos.y) + int(map_pos.x)] != 0;
 			if(!walkable) return false;
 		}
 		return true;
@@ -437,14 +427,10 @@ protected:
 
 		glm::mat4 model = glm::mat4(1.0);
 		mvp.model = glm::translate(
-			glm::rotate(
 				glm::translate(
 					model,
 					glm::vec3(-5, 0, -5) + translation
-				), 
-				glm::radians(90.0f), 
-				glm::vec3(0, 1, 0)
-			),
+				),
 			glm::vec3(5, 0, 5)
 		);
 
