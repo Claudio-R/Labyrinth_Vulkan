@@ -1,24 +1,5 @@
 #version 450
 
-//// lights
-//layout(set = 1, binding = 0) uniform Material {
-//    vec3 lightPositions[4];
-//    vec3 lightColors[4];
-//} l;
-//
-//// material parameters
-//layout(set = 1, binding = 1) uniform sampler2D albedo_map;
-//layout(set = 1, binding = 2) uniform sampler2D metallic_map;
-//layout(set = 1, binding = 3) uniform sampler2D roughness_map;
-//layout(set = 1, binding = 4) uniform sampler2D ao_map;
-//
-//layout(location = 0) in vec3 FragPos;
-//layout(location = 1) in vec3 viewDir;
-//layout(location = 2) in vec3 Normal;
-//layout(location = 3) in vec2 TexCoords;
-
-// OUTPUT
-
 layout (set = 1, binding = 0) uniform Fire {
     vec2 resolution;
     float time;
@@ -31,8 +12,8 @@ layout(location = 3) in vec2 TexCoords;
 
 layout(location = 0) out vec4 FragColor;
 
-#define timeScale 			time * 1.0
-#define fireMovement 		vec2(-0.01, -0.5)
+#define timeScale 			fire.time * 1.0
+#define fireMovement 		vec2(0.01, 0.5)
 #define distortionMovement	vec2(-0.01, -0.3)
 #define normalStrength		40.0
 #define distortionStrength	0.1
@@ -84,12 +65,12 @@ vec3 bumpMap(vec2 uv) {
 }
 
 void main() {
-    vec2 uv = TexCoords.xy/fire.resolution.xy;
-    vec3 normal = bumpMap(uv * vec2(1.0, 0.3) + distortionMovement * fire.timeScale);
+    vec2 uv = FragPos.xy/fire.resolution.xy;
+    vec3 normal = bumpMap(uv * vec2(1.0, 0.3) + distortionMovement * timeScale);
     vec2 displacement = clamp((normal.xy - .5) * distortionStrength, -1., 1.);
     uv += displacement;
 
-    vec2 uvT = (uv * vec2(1.0, 0.5)) + fireMovement * fire.timeScale;
+    vec2 uvT = (uv * vec2(1.0, 0.5)) + fireMovement * timeScale;
     float n = pow(fbm(8.0 * uvT), 1.0);
 
     float gradient = pow(1.0 - uv.y, 2.0) * 5.;
@@ -97,5 +78,5 @@ void main() {
 
     vec3 color = finalNoise * vec3(2.*n, 2.*n*n*n, n*n*n*n);
     FragColor = vec4(color, 1.0);
-//    FragColor = vec4(vec3(finalNoise), 1.);
+//    gl_FragColor = vec4(vec3(finalNoise), 1.);
 }

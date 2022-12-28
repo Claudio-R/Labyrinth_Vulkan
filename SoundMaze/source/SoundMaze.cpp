@@ -174,7 +174,7 @@ struct Lights {
 };
 
 struct Fire {
-	glm::vec2 resolution = glm::vec2(4, 4);
+	glm::vec2 resolution = glm::vec2(0.1, 0.1);
 	float time = 0.0f;
 };
 
@@ -289,15 +289,11 @@ protected:
 			
 			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
 			treasuresPipeline.dsls[1].init(this, {
-				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}
 				});
 			
 			treasuresPipeline.pipeline.init(this,
-				"shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv",
+				"shaders/graphics_treasures_vert.spv", "shaders/graphics_treasures_frag.spv",
 				{
 					&treasuresPipeline.dsls[0],
 					&treasuresPipeline.dsls[1]
@@ -313,12 +309,7 @@ protected:
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				treasuresPipeline.dss.push_back(DescriptorSet{});
 				treasuresPipeline.dss[NUM_TREASURES + i].init(this, &treasuresPipeline.dsls[1], {
-					//{0, TEXTURE, 0, &maze.albedo_map},
-					{0, UNIFORM, sizeof(Lights), nullptr},
-					{1, TEXTURE, 0, &treasure.albedo_map},
-					{2, TEXTURE, 0, &treasure.metallic_map},
-					{3, TEXTURE, 0, &treasure.roughness_map},
-					{4, TEXTURE, 0, &treasure.light_map},
+					{0, UNIFORM, sizeof(Fire), nullptr}
 					});
 			}
 			
@@ -341,50 +332,43 @@ protected:
 				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
 				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
 				0, nullptr);
-		
+
 			firstSet = 1;
-			VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
-			VkDeviceSize offsets[] = { 0 };
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-			vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
 				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
 				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
 				0, nullptr);
-		
+			VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
 		}
 		
 		{
-			 //PIPELINE SKYBOX
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-					sky.skybox.skyBoxPipeline.graphicsPipeline);
-				VkBuffer vertexBuffersSk[] = { sky.skybox.skyboxModel.vertexBuffer };
-				VkDeviceSize offsetsSk[] = { 0 };
-				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
-				vkCmdBindIndexBuffer(commandBuffer, sky.skybox.skyboxModel.indexBuffer, 0,
-					VK_INDEX_TYPE_UINT32);
-				vkCmdBindDescriptorSets(commandBuffer,
-					VK_PIPELINE_BIND_POINT_GRAPHICS,
-					sky.skybox.skyBoxPipeline.pipelineLayout, 0, 1,
-					&sky.skybox.SkyBoxDescriptorSets[currentImage],
-					0, nullptr);
-				vkCmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(sky.skybox.skyboxModel.indices.size()), 1, 0, 0, 0);
+			//PIPELINE SKYBOX
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, sky.skybox.skyBoxPipeline.graphicsPipeline);
+			
+			VkBuffer vertexBuffersSk[] = { sky.skybox.skyboxModel.vertexBuffer };
+			VkDeviceSize offsetsSk[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
+			vkCmdBindIndexBuffer(commandBuffer, sky.skybox.skyboxModel.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				sky.skybox.skyBoxPipeline.pipelineLayout, 0, 1,
+				&sky.skybox.SkyBoxDescriptorSets[currentImage],
+				0, nullptr);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(sky.skybox.skyboxModel.indices.size()), 1, 0, 0, 0);
 		}
 				
 		{
 			// Treasures
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
-
 			for (int i = 0; i < NUM_TREASURES; i++) {
-				
 				firstSet = 0;
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
 					&treasuresPipeline.dss[i].descriptorSets[currentImage],
 					0, nullptr);
-				
 				
 				firstSet = 1;
 				VkBuffer vertexBuffers[] = { treasure.model.vertexBuffer };
@@ -396,7 +380,6 @@ protected:
 					&treasuresPipeline.dss[NUM_TREASURES + i].descriptorSets[currentImage],
 					0, nullptr);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
-				
 			}
 		}
 	}
@@ -519,10 +502,10 @@ protected:
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
 		
 		ModelViewProjection mvp;
-		Lights l;
 
 		// Maze Pipeline
 		{
+			Lights l;
 			mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.1f, 0.0f));
 			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 			memcpy(data, &mvp, sizeof(mvp));
@@ -535,14 +518,16 @@ protected:
 
 		// Treasures Pipeline
 		{
+			Fire f;
+			f.time = time;
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 				memcpy(data, &mvp, sizeof(mvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
 			
-				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
-				memcpy(data, &l, sizeof(l));
+				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(f), 0, &data);
+				memcpy(data, &f, sizeof(f));
 				vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);
 			}
 		}
