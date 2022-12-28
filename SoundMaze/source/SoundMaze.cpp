@@ -173,6 +173,11 @@ struct Lights {
 	};
 };
 
+struct Fire {
+	glm::vec2 resolution = glm::vec2(4, 4);
+	float time = 0.0f;
+};
+
 class SoundMaze : public BaseProject {
 protected:
 
