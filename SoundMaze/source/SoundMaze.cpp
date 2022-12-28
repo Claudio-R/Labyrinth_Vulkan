@@ -14,6 +14,7 @@
 
 const std::string MODEL_PATH_MAZE = "models/maze.obj";
 const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
+const std::string MODEL_PATH_SKYBOX = "models/SkyBoxCube.obj";
 
 const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze_albedo.jpg";
 const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze_metallic.jpg";
@@ -144,7 +145,7 @@ struct Pipe {
 struct Sky {
 	alignas(16) SkyBox skybox;
 
-	void init(BaseProject* BP, const char* objFile, std::vector <const char*> textureFiles) {
+	void init(BaseProject* BP, std::string objFile, std::vector <const char*> textureFiles) {
 		skybox.init(BP, objFile, textureFiles);
 	}
 
@@ -153,7 +154,6 @@ struct Sky {
 	}
 };
 
-// UNIFORMS
 struct ModelViewProjection {
 	alignas(16) glm::mat4 model;
 	alignas(16) glm::mat4 view;
@@ -197,9 +197,9 @@ protected:
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
 		// Non può essere spostata dentro init
-		uniformBlocksInPool = 2 + 2 * NUM_TREASURES; // 2 per maze + 1 per treasure
-		texturesInPool = 4 + 4 * NUM_TREASURES; // 4 per maze + 4 per treasure
-		setsInPool = 2 + 2 * NUM_TREASURES; // 2 per maze + 2 per treasure
+		uniformBlocksInPool = 2 + 1 + 2 * NUM_TREASURES; // 2 per maze + 1 per skybox + 1 per treasure
+		texturesInPool = 4 + 1 + 4 * NUM_TREASURES; // 4 per maze + 1 per skybox + 4 per treasure
+		setsInPool = 2 + 1 + 2 * NUM_TREASURES; // 2 per maze + 1 per skybox + 2 per treasure
 	}
 	
 	void localInit() {
@@ -210,7 +210,7 @@ protected:
 			assert(map.width > 0);
 			assert(map.height > 0);
 		
-			sky.init(this, "models/SkyBoxCube.obj", 
+			sky.init(this, MODEL_PATH_SKYBOX, 
 				{
 				"textures/sky/right.png",
 				"textures/sky/left.png",
@@ -243,16 +243,16 @@ protected:
 			// Maze	
 			mazePipeline.dsls.push_back(DescriptorSetLayout{});
 			mazePipeline.dsls[0].init(this, {
-				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} // MVP
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1} // MVP
 				});
 
 			mazePipeline.dsls.push_back(DescriptorSetLayout{});
 			mazePipeline.dsls[1].init(this, {
-				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Lights 
-				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Albedo
-				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Metallic
-				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // Roughness
-				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // AO
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}, // Lights 
+				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}, // Albedo
+				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}, // Metallic
+				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}, // Roughness
+				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}, // AO
 				});
 
 			mazePipeline.pipeline.init(this, 
@@ -282,16 +282,16 @@ protected:
 			// Treasures
 			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
 			treasuresPipeline.dsls[0].init(this, {
-				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT} // MVP
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1} // MVP
 				});
 			
 			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
 			treasuresPipeline.dsls[1].init(this, {
-				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT},
-				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
-				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
+				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
+				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
+				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
+				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
 				});
 			
 			treasuresPipeline.pipeline.init(this,

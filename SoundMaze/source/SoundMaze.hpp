@@ -33,6 +33,7 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
+const int TEXTURE_ARRAY_SIZE = 12;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 // Lesson 22.0
@@ -84,7 +85,6 @@ struct Vertex {
 	}
 };
 
-
 // Lesson 13
 struct QueueFamilyIndices {
 	std::optional<uint32_t> graphicsFamily;
@@ -103,12 +103,8 @@ struct SwapChainSupportDetails {
 	std::vector<VkPresentModeKHR> presentModes;
 };
 
-
 //// For debugging - Lesson 22.0
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, 
-	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-	const VkAllocationCallbacks* pAllocator,
-	VkDebugUtilsMessengerEXT* pDebugMessenger) {
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
 		vkGetInstanceProcAddr(instance,
 			"vkCreateDebugUtilsMessengerEXT");
@@ -120,7 +116,6 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance,
 	}
 }
 
-//// For debugging - Lesson 22.0
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
 	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
 		vkGetInstanceProcAddr(instance,
@@ -240,6 +235,7 @@ protected:
 	// L22.2 --- Frame buffers
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 	size_t currentFrame = 0;
+	bool framebufferResized = false;
 
 	// L22.3 --- Synchronization objects
 	std::vector<VkSemaphore> imageAvailableSemaphores;
@@ -255,6 +251,13 @@ protected:
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 		window = glfwCreateWindow(windowWidth, windowHeight, windowTitle.c_str(), nullptr, nullptr);
+	
+		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+	}
+	
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+		auto app = reinterpret_cast<BaseProject*>(glfwGetWindowUserPointer(window));
+		app->framebufferResized = true;
 	}
 
 	virtual void localInit() = 0;
@@ -314,13 +317,11 @@ protected:
 		}
 
 		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-		createInfo.enabledLayerCount =
-			static_cast<uint32_t>(validationLayers.size());
+		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 		createInfo.ppEnabledLayerNames = validationLayers.data();
 
 		populateDebugMessengerCreateInfo(debugCreateInfo);
-		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)
-			&debugCreateInfo;
+		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
 		// For debugging [Lesson 22] - End
 
 		VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
@@ -335,11 +336,9 @@ protected:
 	std::vector<const char*> getRequiredExtensions() {
 		uint32_t glfwExtensionCount = 0;
 		const char** glfwExtensions;
-		glfwExtensions =
-			glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-		std::vector<const char*> extensions(glfwExtensions,
-			glfwExtensions + glfwExtensionCount);
+		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
 		return extensions;
@@ -351,8 +350,7 @@ protected:
 		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
 		std::vector<VkLayerProperties> availableLayers(layerCount);
-		vkEnumerateInstanceLayerProperties(&layerCount,
-			availableLayers.data());
+		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
 		for (const char* layerName : validationLayers) {
 			bool layerFound = false;
@@ -376,13 +374,13 @@ protected:
 	void populateDebugMessengerCreateInfo(
 		VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
 		createInfo = {};
-		createInfo.sType =
-			VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		createInfo.messageSeverity =
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+		createInfo.messageType = 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		createInfo.pfnUserCallback = debugCallback;
@@ -413,8 +411,7 @@ protected:
 
 	// Lesson 13
 	void createSurface() {
-		if (glfwCreateWindowSurface(instance, window, nullptr, &surface)
-			!= VK_SUCCESS) {
+		if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create window surface!");
 		}
 	}
@@ -710,37 +707,36 @@ protected:
 		swapChainImageViews.resize(swapChainImages.size());
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
-			swapChainImageViews[i] = createImageView(swapChainImages[i],
+			swapChainImageViews[i] = createImageView_modified(swapChainImages[i],
 				swapChainImageFormat,
 				VK_IMAGE_ASPECT_COLOR_BIT, 1);
 		}
 	}
 
 	// Lesson 14
-	VkImageView createImageView(VkImage image, VkFormat format,
-		VkImageAspectFlags aspectFlags,
-		uint32_t mipLevels // New in Lesson 23
-	) {
-		VkImageViewCreateInfo viewInfo{};
-		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfo.image = image;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = format;
-		viewInfo.subresourceRange.aspectMask = aspectFlags;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = mipLevels;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-		viewInfo.subresourceRange.layerCount = 1;
-		VkImageView imageView;
-
-		VkResult result = vkCreateImageView(device, &viewInfo, nullptr,
-			&imageView);
-		if (result != VK_SUCCESS) {
-			PrintVkError(result);
-			throw std::runtime_error("failed to create image view!");
-		}
-		return imageView;
-	}
+	//VkImageView createImageView(VkImage image, VkFormat format,
+	//	VkImageAspectFlags aspectFlags,
+	//	uint32_t mipLevels // New in Lesson 23
+	//) {
+	//	VkImageViewCreateInfo viewInfo{};
+	//	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	//	viewInfo.image = image;
+	//	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	//	viewInfo.format = format;
+	//	viewInfo.subresourceRange.aspectMask = aspectFlags;
+	//	viewInfo.subresourceRange.baseMipLevel = 0;
+	//	viewInfo.subresourceRange.levelCount = mipLevels;
+	//	viewInfo.subresourceRange.baseArrayLayer = 0;
+	//	viewInfo.subresourceRange.layerCount = 1;
+	//	VkImageView imageView;
+	//	VkResult result = vkCreateImageView(device, &viewInfo, nullptr,
+	//		&imageView);
+	//	if (result != VK_SUCCESS) {
+	//		PrintVkError(result);
+	//		throw std::runtime_error("failed to create image view!");
+	//	}
+	//	return imageView;
+	//}
 
 	VkImageView createImageView_modified(VkImage image, VkFormat format,
 		VkImageAspectFlags aspectFlags,
@@ -778,13 +774,11 @@ protected:
 		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		depthAttachment.finalLayout =
-			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkAttachmentReference depthAttachmentRef{};
 		depthAttachmentRef.attachment = 1;
-		depthAttachmentRef.layout =
-			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkAttachmentDescription colorAttachment{};
 		colorAttachment.format = swapChainImageFormat;
@@ -798,8 +792,7 @@ protected:
 
 		VkAttachmentReference colorAttachmentRef{};
 		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout =
-			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -890,17 +883,12 @@ protected:
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			depthImage, depthImageMemory);
-		depthImageView = createImageView(depthImage, depthFormat,
+		depthImageView = createImageView_modified(depthImage, depthFormat,
 			VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}
 
 	// Lesson 22.1
-	void createImage(uint32_t width, uint32_t height,
-		uint32_t mipLevels, // New in Lesson 23
-		VkFormat format,
-		VkImageTiling tiling, VkImageUsageFlags usage,
-		VkMemoryPropertyFlags properties, VkImage& image,
-		VkDeviceMemory& imageMemory) {
+	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
 		VkImageCreateInfo imageInfo{};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -1548,8 +1536,6 @@ protected:
 
 };
 
-
-
 struct Model {
 	BaseProject* BP;
 	std::vector<Vertex> vertices;
@@ -1697,7 +1683,7 @@ struct Texture {
 		vkFreeMemory(BP->device, stagingBufferMemory, nullptr);
 	}
 	void createTextureImageView() {
-		textureImageView = BP->createImageView(textureImage,
+		textureImageView = BP->createImageView_modified(textureImage,
 			VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_ASPECT_COLOR_BIT,
 			mipLevels);
@@ -1753,7 +1739,7 @@ struct DescriptorSetLayoutBinding {
 struct DescriptorSetLayout {
 	BaseProject* BP;
 	VkDescriptorSetLayout descriptorSetLayout;
-
+	
 	void init(BaseProject* bp, std::vector<DescriptorSetLayoutBinding> B) {
 		BP = bp;
 
@@ -1781,7 +1767,6 @@ struct DescriptorSetLayout {
 	}
 	void initSkybox(BaseProject* bp) {
 		BP = bp;
-
 		VkDescriptorSetLayoutBinding uboLayoutBinding{};
 		uboLayoutBinding.binding = 0;
 		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1822,7 +1807,6 @@ struct Pipeline {
 	VkPipeline graphicsPipeline;
 	VkPipelineLayout pipelineLayout;
 
-	
 	VkShaderModule createShaderModule(const std::vector<char>& code) {
 		VkShaderModuleCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1840,7 +1824,6 @@ struct Pipeline {
 
 		return shaderModule;
 	}
-	
 	static std::vector<char> readFile(const std::string& filename) {
 		std::ifstream file(filename, std::ios::ate | std::ios::binary);
 		if (!file.is_open()) {
@@ -1858,8 +1841,7 @@ struct Pipeline {
 		return buffer;
 	}
 	
-	
-	void init(BaseProject* bp, const std::string& VertShader, const std::string& FragShader, std::vector<DescriptorSetLayout*> D) {
+	void init(BaseProject* bp, const std::string& VertShader, const std::string& FragShader, std::vector<DescriptorSetLayout*> D, int pushConstantRangeCount = 0) {
 		BP = bp;
 
 		auto vertShaderCode = readFile(VertShader);
@@ -1889,8 +1871,7 @@ struct Pipeline {
 		fragShaderStageInfo.module = fragShaderModule;
 		fragShaderStageInfo.pName = "main";
 
-		VkPipelineShaderStageCreateInfo shaderStages[] =
-		{ vertShaderStageInfo, fragShaderStageInfo };
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
 		// Lesson 17
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
@@ -2000,7 +1981,7 @@ struct Pipeline {
 			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.setLayoutCount = DSL.size();
 		pipelineLayoutInfo.pSetLayouts = DSL.data();
-		pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+		pipelineLayoutInfo.pushConstantRangeCount = pushConstantRangeCount; // Optional
 		pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
 		VkResult result = vkCreatePipelineLayout(BP->device, &pipelineLayoutInfo, nullptr,
@@ -2016,7 +1997,7 @@ struct Pipeline {
 			VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 		depthStencil.depthTestEnable = VK_TRUE;
 		depthStencil.depthWriteEnable = VK_TRUE;
-		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 		depthStencil.depthBoundsTestEnable = VK_FALSE;
 		depthStencil.minDepthBounds = 0.0f; // Optional
 		depthStencil.maxDepthBounds = 1.0f; // Optional
@@ -2053,14 +2034,14 @@ struct Pipeline {
 		vkDestroyShaderModule(BP->device, fragShaderModule, nullptr);
 		vkDestroyShaderModule(BP->device, vertShaderModule, nullptr);
 	}
-	
 	void cleanup() {
 		vkDestroyPipeline(BP->device, graphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(BP->device, pipelineLayout, nullptr);
 	}
 };
 
-enum DescriptorSetElementType { UNIFORM, TEXTURE };
+// EDITED --> BREAKING ASSUMPTIONS MADE IN STARTER PROJECT
+enum DescriptorSetElementType { UNIFORM, TEXTURE, TEXTURE_ARRAY, SAMPLER };
 
 struct DescriptorSetElement {
 	int binding;
@@ -2153,6 +2134,36 @@ struct DescriptorSet {
 					descriptorWrites[j].descriptorCount = 1;
 					descriptorWrites[j].pImageInfo = &imageInfo;
 				}
+				else if (E[j].type == TEXTURE_ARRAY) {
+					VkDescriptorImageInfo descriptorImageInfos[TEXTURE_ARRAY_SIZE];
+					for (uint32_t i = 0; i < TEXTURE_ARRAY_SIZE; i++)
+					{
+
+						descriptorImageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+						descriptorImageInfos[i].imageView = E[j].tex[i].textureImageView;
+						descriptorImageInfos[i].sampler = nullptr;
+					}
+
+					descriptorWrites[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					descriptorWrites[j].dstSet = descriptorSets[i];
+					descriptorWrites[j].dstBinding = E[j].binding;
+					descriptorWrites[j].dstArrayElement = 0;
+					descriptorWrites[j].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+					descriptorWrites[j].descriptorCount = TEXTURE_ARRAY_SIZE;
+					descriptorWrites[j].pImageInfo = descriptorImageInfos;
+				}
+				else if (E[j].type == SAMPLER) {
+					VkDescriptorImageInfo imageInfo{};
+					imageInfo.sampler = E[j].tex->textureSampler;
+
+					descriptorWrites[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					descriptorWrites[j].dstSet = descriptorSets[i];
+					descriptorWrites[j].dstBinding = E[j].binding;
+					descriptorWrites[j].dstArrayElement = 0;
+					descriptorWrites[j].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+					descriptorWrites[j].descriptorCount = 1;
+					descriptorWrites[j].pImageInfo = &imageInfo;
+				}
 			}
 			vkUpdateDescriptorSets(BP->device,
 				static_cast<uint32_t>(descriptorWrites.size()),
@@ -2193,8 +2204,7 @@ struct SkyBox {
 	std::vector<VkDescriptorSet> SkyBoxDescriptorSets;
 	std::vector<VkDeviceMemory> SkyBoxUniformBuffersMemory;
 
-
-	void loadSkyBox(const char* ObjFile, std::vector <const char*> TextureFiles) {
+	void loadSkyBox(std::string ObjFile, std::vector <const char*> TextureFiles) {
 		skyboxModel.init(BP, ObjFile);
 		createCubicTextureImage(TextureFiles, skyBoxTexture);
 		createSkyBoxImageView(skyBoxTexture);
@@ -2224,14 +2234,14 @@ struct SkyBox {
 		stbi_uc* pixels[6] = {};
 
 		for (int i = 0; i < TextureFiles.size(); i++) {
-			pixels[i] = stbi_load(TextureFiles[i], &texWidth, &texHeight,
-				&texChannels, STBI_rgb_alpha);
+			pixels[i] = stbi_load(TextureFiles[i], &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 			if (!pixels[i]) {
 				std::cout << TextureFiles[i] << "\n";
 				throw std::runtime_error("failed to load texture image!");
 			}
-			std::cout << TextureFiles[i] << " -> size: " << texWidth
-				<< "x" << texHeight << ", ch: " << texChannels << "\n";
+			assert(texWidth != 0);
+			assert(texHeight != 0);
+			std::cout << TextureFiles[i] << " -> size: " << texWidth << "x" << texHeight << ", ch: " << texChannels << "\n";
 		}
 
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
@@ -2242,8 +2252,7 @@ struct SkyBox {
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
 		BP->createBuffer(totalImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			stagingBuffer, stagingBufferMemory);
 		void* data;
 
@@ -2258,8 +2267,7 @@ struct SkyBox {
 			stbi_image_free(pixels[i]);
 		}
 
-		createSkyBoxImage(texWidth, texHeight, TD.mipLevels, TD.textureImage,
-			TD.textureImageMemory);
+		createSkyBoxImage(texWidth, texHeight, TD.mipLevels, TD.textureImage, TD.textureImageMemory);
 
 		BP->transitionImageLayout_modified(TD.textureImage, VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, TD.mipLevels, 6);
@@ -2308,17 +2316,14 @@ struct SkyBox {
 		vkBindImageMemory(BP->device, image, imageMemory, 0);
 	}
 	void createSkyBoxImageView(Texture& TD) {
-
 		TD.textureImageView = BP->createImageView_modified(
 			TD.textureImage,
 			VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_ASPECT_COLOR_BIT,
 			TD.mipLevels,
 			VK_IMAGE_VIEW_TYPE_CUBE, 6);
-
 	}
 	void createSkyBoxDescriptorSets() {
-
 		std::vector<VkDescriptorSetLayout> layouts(BP->swapChainImages.size(),
 			skyBoxDSL.descriptorSetLayout);
 		VkDescriptorSetAllocateInfo allocInfo{};
@@ -2365,7 +2370,7 @@ struct SkyBox {
 		}
 	}
 
-	void init(BaseProject* baseProject, const char* objFile, std::vector <const char*> textureFiles) {
+	void init(BaseProject* baseProject, std::string objFile, std::vector <const char*> textureFiles) {
 		this->BP = baseProject;
 		skyBoxDSL.initSkybox(this->BP);
 		skyBoxPipeline.init(this->BP, "shaders/SkyBoxVert.spv", "shaders/SkyBoxFrag.spv", { &skyBoxDSL });
