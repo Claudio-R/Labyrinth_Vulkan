@@ -25,6 +25,7 @@ const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
 const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
 const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
 
+
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
 constexpr float NUM_TREASURES = 10;
@@ -140,6 +141,18 @@ struct Pipe {
 	}
 };
 
+struct Sky {
+	alignas(16) SkyBox skybox;
+
+	void init(BaseProject* BP, const char* objFile, std::vector <const char*> textureFiles) {
+		skybox.init(BP, objFile, textureFiles);
+	}
+
+	void cleanup() {
+		skybox.cleanup();
+	}
+};
+
 // UNIFORMS
 struct ModelViewProjection {
 	alignas(16) glm::mat4 model;
@@ -171,9 +184,11 @@ protected:
 	FloorMap map{};
 	Object maze{};
 	Object treasure{};
+	Sky sky;
 
 	Pipe mazePipeline{};
 	Pipe treasuresPipeline{};
+	Pipe skyboxPipeline{};
 	
 	void setWindowParameters() {	
 		windowWidth = 1200;
@@ -189,12 +204,21 @@ protected:
 	
 	void localInit() {
 
-		// Load the map
+		// Load the map and skybox
 		{
 			map.init("textures/high-constrast-maze-map.png");
-			//generateRandomTreasuresTranslations();
 			assert(map.width > 0);
 			assert(map.height > 0);
+		
+			sky.init(this, "models/SkyBoxCube.obj", 
+				{
+				"textures/sky/right.png",
+				"textures/sky/left.png",
+				"textures/sky/top.png",
+				"textures/sky/bottom.png",
+				"textures/sky/front.png",
+				"textures/sky/back.png"
+				});
 		}
 
 		// Load the models
@@ -205,8 +229,7 @@ protected:
 			maze.roughness_map.init(this, TEXTURE_PATH_MAZE_Rou);
 			maze.light_map.init(this, TEXTURE_PATH_MAZE_Ao);
 			assert(maze.model.indices.size() > 0);
-		}
-		{
+
 			treasure.model.init(this, MODEL_PATH_TREASURE);
 			treasure.albedo_map.init(this, TEXTURE_PATH_TREASURE_base);
 			treasure.metallic_map.init(this, TEXTURE_PATH_TREASURE_base);
@@ -299,7 +322,6 @@ protected:
 			
 			std::cout << "Treasures Pipeline Initialized" << std::endl;
 		}
-		
 	}
 		
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
@@ -329,6 +351,24 @@ protected:
 				0, nullptr);
 		
 			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
+		}
+		
+		{
+			 //PIPELINE SKYBOX
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+					sky.skybox.skyBoxPipeline.graphicsPipeline);
+				VkBuffer vertexBuffersSk[] = { sky.skybox.skyboxModel.vertexBuffer };
+				VkDeviceSize offsetsSk[] = { 0 };
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
+				vkCmdBindIndexBuffer(commandBuffer, sky.skybox.skyboxModel.indexBuffer, 0,
+					VK_INDEX_TYPE_UINT32);
+				vkCmdBindDescriptorSets(commandBuffer,
+					VK_PIPELINE_BIND_POINT_GRAPHICS,
+					sky.skybox.skyBoxPipeline.pipelineLayout, 0, 1,
+					&sky.skybox.SkyBoxDescriptorSets[currentImage],
+					0, nullptr);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(sky.skybox.skyboxModel.indices.size()), 1, 0, 0, 0);
 		}
 				
 		{
@@ -507,11 +547,31 @@ protected:
 			}
 		}
 
+		// Skybox
+		{
+			float aspect_ratio = swapChainExtent.width / (float)swapChainExtent.height;
+
+			glm::mat4 CamMat = mvp.view;
+			glm::mat4 out = glm::perspective(glm::radians(90.0f), aspect_ratio, 0.1f, 100.0f);
+			out[1][1] *= -1;
+
+			GlobalUniformBufferObjectSkybox guboSky{};
+			guboSky.mMat = glm::mat4(1.0f);
+			guboSky.nMat = glm::mat4(1.0f);
+			guboSky.mvpMat = out * glm::mat4(glm::mat3(CamMat)) * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.15f, 0.0f));
+		
+			vkMapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage], 0,
+				sizeof(guboSky), 0, &data);
+			memcpy(data, &guboSky, sizeof(guboSky));
+			vkUnmapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage]);
+		}
+		
 	}
 
 	void localCleanup() {
 		map.cleanup();
 		maze.cleanup();
+		sky.cleanup();
 		treasure.cleanup();
 		mazePipeline.cleanup();
 		treasuresPipeline.cleanup();
