@@ -26,7 +26,6 @@ const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
 const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
 const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
 
-
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
 constexpr float NUM_TREASURES = 10;
@@ -144,11 +143,9 @@ struct Pipe {
 
 struct Sky {
 	alignas(16) SkyBox skybox;
-
 	void init(BaseProject* BP, std::string objFile, std::vector <const char*> textureFiles) {
 		skybox.init(BP, objFile, textureFiles);
 	}
-
 	void cleanup() {
 		skybox.cleanup();
 	}
@@ -238,7 +235,7 @@ protected:
 			assert(treasure.model.indices.size() > 0);
 		}
 		
-		// Initialize Pipelines
+		// Initialize Pipelines (the pipeline for skybox is initialized automatically)
 		{	
 			// Maze	
 			mazePipeline.dsls.push_back(DescriptorSetLayout{});
@@ -433,7 +430,6 @@ protected:
 			}
 		}
 	}
-	
 	void updateCameraPosition(glm::vec3* CamPos, float deltaT, float MOVE_SPEED, glm::vec3 CamAng) {
 
 		glm::vec3 oldCamPos = *CamPos;
@@ -479,7 +475,6 @@ protected:
 		}
 		*CamPos = newCamPos;
 	}
-	
 	ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
 
 		ModelViewProjection mvp{};
@@ -560,8 +555,7 @@ protected:
 			guboSky.nMat = glm::mat4(1.0f);
 			guboSky.mvpMat = out * glm::mat4(glm::mat3(CamMat)) * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.15f, 0.0f));
 		
-			vkMapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage], 0,
-				sizeof(guboSky), 0, &data);
+			vkMapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage], 0, sizeof(guboSky), 0, &data);
 			memcpy(data, &guboSky, sizeof(guboSky));
 			vkUnmapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage]);
 		}
