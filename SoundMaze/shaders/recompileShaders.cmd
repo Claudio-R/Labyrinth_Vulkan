@@ -1,4 +1,4 @@
-"C:\Program Files\VulkanSDK\Bin\glslc.exe" shader0.vert -o vert0.spv
-"C:\Program Files\VulkanSDK\Bin\glslc.exe" shader0.frag -o frag0.spv
-"C:\Program Files\VulkanSDK\Bin\glslc.exe" shader1.vert -o vert1.spv
-"C:\Program Files\VulkanSDK\Bin\glslc.exe" shader1.frag -o frag1.spv
+"C:\Program Files\VulkanSDK\Bin\glslc.exe" graphics_maze.vert -o graphics_maze_vert.spv
+"C:\Program Files\VulkanSDK\Bin\glslc.exe" graphics_maze.frag -o graphics_maze_frag.spv
+"C:\Program Files\VulkanSDK\Bin\glslc.exe" graphics_treasures.vert -o graphics_treasures_vert.spv
+"C:\Program Files\VulkanSDK\Bin\glslc.exe" graphics_treasures.frag -o graphics_treasures_frag.spv
