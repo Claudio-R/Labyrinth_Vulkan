@@ -24,7 +24,7 @@ const std::string TEXTURE_PATH_TREASURE_base = "textures/treasure_baseColor.png"
 const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
 const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
 const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
-const char *AUDIO_PATH = "/Users/alessandromolteni/Desktop/audio/audio.wav";
+const char *AUDIO_PATH = "audio/148.wav";
 
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
@@ -71,6 +71,11 @@ struct FloorMap {
     void init(const char* url) {
         loadImg(url);
         generateRandomTreasuresPositions();
+    }
+    
+    std::vector <glm::vec3> getTreasuresPositions(){
+        
+        return treasuresPositions;
     }
     
     void loadImg(const char* url) {
@@ -282,7 +287,7 @@ protected:
         
         LinkBufferToSource(&appState);
         
-        PositionListenerInScene();
+        PositionListenerInScene(0.0, 0.0, 0.0);
         
         StartSource(&appState);
         
@@ -296,200 +301,40 @@ protected:
     }
     
     void CreateSource(AppState *appState) {
-      alGenSources(1, appState->sources);
+      alGenSources(NUM_TREASURES, appState->sources);
+      alDistanceModel(AL_LINEAR_DISTANCE_CLAMPED);
 
-      alSourcef(appState->sources[0],
-                AL_GAIN,
-                AL_MAX_GAIN);
-      CheckALError("setting the AL property for gain");
+      for(int i = 0; i < NUM_TREASURES; i++){
+        
+          alSourcef(appState->sources[i],
+                    AL_GAIN,
+                    0.5f);
+          alSourcef(appState->sources[i], AL_MAX_DISTANCE, 5.0f);
+          alSourcei(appState->sources[i], AL_LOOPING, AL_TRUE);
+          
+          CheckALError("setting the AL property for gain");
+        }
       
       UpdateSourceLocation(appState);
     }
     
     void UpdateSourceLocation(AppState *appState) {
-        double theta = 90.0f;
-      ALfloat x = 3 * cos(theta);
-      ALfloat y = 0.5 * sin(theta);
-      ALfloat z = 1.0 * sin(theta);
+        std::vector <glm::vec3> pos = map.getTreasuresPositions();
       
-      alSource3f(appState->sources[0], AL_POSITION, x, y, z);
-      
-      CheckALError("updating source lodation");
-      
+        for(int i = 0; i < NUM_TREASURES; i++){
+            
+            ALfloat x = pos[i].x;
+            ALfloat y = pos[i].y;
+            ALfloat z = pos[i].z;
+            
+            alSource3f(appState->sources[i], AL_POSITION, x, y, z);
+            
+            CheckALError("updating source location");
+        }
+        
       return;
     }
-    
-//    std::int32_t convert_to_int(char* buffer, std::size_t len)
-//    {
-//        std::int32_t a = 0;
-//        if(std::endian::native == std::endian::little)
-//            std::memcpy(&a, buffer, len);
-//        else
-//            for(std::size_t i = 0; i < len; ++i)
-//                reinterpret_cast<char*>(&a)[3 - i] = buffer[i];
-//        return a;
-//    }
-//
-//    bool load_wav_file_header(std::ifstream& file,
-//                              std::uint8_t& channels,
-//                              std::int32_t& sampleRate,
-//                              std::uint8_t& bitsPerSample,
-//                              ALsizei& size)
-//    {
-//        char buffer[4];
-//        if(!file.is_open())
-//            return false;
-//
-//        // the RIFF
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read RIFF" << std::endl;
-//            return false;
-//        }
-//        if(std::strncmp(buffer, "RIFF", 4) != 0)
-//        {
-//            std::cerr << "ERROR: file is not a valid WAVE file (header doesn't begin with RIFF)" << std::endl;
-//            return false;
-//        }
-//
-//        // the size of the file
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read size of file" << std::endl;
-//            return false;
-//        }
-//
-//        // the WAVE
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read WAVE" << std::endl;
-//            return false;
-//        }
-//        if(std::strncmp(buffer, "WAVE", 4) != 0)
-//        {
-//            std::cerr << "ERROR: file is not a valid WAVE file (header doesn't contain WAVE)" << std::endl;
-//            return false;
-//        }
-//
-//        // "fmt/0"
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read fmt/0" << std::endl;
-//            return false;
-//        }
-//
-//        // this is always 16, the size of the fmt data chunk
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read the 16" << std::endl;
-//            return false;
-//        }
-//
-//        // PCM should be 1?
-//        if(!file.read(buffer, 2))
-//        {
-//            std::cerr << "ERROR: could not read PCM" << std::endl;
-//            return false;
-//        }
-//
-//        // the number of channels
-//        if(!file.read(buffer, 2))
-//        {
-//            std::cerr << "ERROR: could not read number of channels" << std::endl;
-//            return false;
-//        }
-//        channels = convert_to_int(buffer, 2);
-//
-//        // sample rate
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read sample rate" << std::endl;
-//            return false;
-//        }
-//        sampleRate = convert_to_int(buffer, 4);
-//
-//        // (sampleRate * bitsPerSample * channels) / 8
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read (sampleRate * bitsPerSample * channels) / 8" << std::endl;
-//            return false;
-//        }
-//
-//        // ?? dafaq
-//        if(!file.read(buffer, 2))
-//        {
-//            std::cerr << "ERROR: could not read dafaq" << std::endl;
-//            return false;
-//        }
-//
-//        // bitsPerSample
-//        if(!file.read(buffer, 2))
-//        {
-//            std::cerr << "ERROR: could not read bits per sample" << std::endl;
-//            return false;
-//        }
-//        bitsPerSample = convert_to_int(buffer, 2);
-//
-//        // data chunk header "data"
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read data chunk header" << std::endl;
-//            return false;
-//        }
-//        if(std::strncmp(buffer, "data", 4) != 0)
-//        {
-//            std::cerr << "ERROR: file is not a valid WAVE file (doesn't have 'data' tag)" << std::endl;
-//            return false;
-//        }
-//
-//        // size of data
-//        if(!file.read(buffer, 4))
-//        {
-//            std::cerr << "ERROR: could not read data size" << std::endl;
-//            return false;
-//        }
-//        size = convert_to_int(buffer, 4);
-//
-//        /* cannot be at the end of file */
-//        if(file.eof())
-//        {
-//            std::cerr << "ERROR: reached EOF on the file" << std::endl;
-//            return false;
-//        }
-//        if(file.fail())
-//        {
-//            std::cerr << "ERROR: fail state set on the file" << std::endl;
-//            return false;
-//        }
-//
-//        return true;
-//    }
-////
-//    char* load_wav(const std::string& filename,
-//                   std::uint8_t& channels,
-//                   std::int32_t& sampleRate,
-//                   std::uint8_t& bitsPerSample,
-//                   ALsizei& size)
-//    {
-//        std::ifstream in(filename, std::ios::binary);
-//        if(!in.is_open())
-//        {
-//            std::cerr << "ERROR: Could not open \"" << filename << "\"" << std::endl;
-//            return nullptr;
-//        }
-//        if(!load_wav_file_header(in, channels, sampleRate, bitsPerSample, size))
-//        {
-//            std::cerr << "ERROR: Could not load wav header of \"" << filename << "\"" << std::endl;
-//            return nullptr;
-//        }
-//
-//        char* data = new char[size];
-//
-//        in.read(data, size);
-//
-//        return data;
-//    }
-    
+        
     void CheckALError(const char *operation) {
       ALenum alErr = alGetError();
       
@@ -558,30 +403,39 @@ protected:
         return framesToPutInBuffer;
     }
     
-    void PositionListenerInScene(void) {
-      alListener3f(AL_POSITION, 0.0, 0.0, 0.0);
+    void PositionListenerInScene(float x, float y, float z) {
+      alListener3f(AL_POSITION, x, y, z);
+        std::cout<<"LIstener position x : " << x << std::endl;
+        std::cout<<"LIstener position y : " << y << std::endl;
+        std::cout<<"LIstener position z : " << z << std::endl;
       CheckALError("setting the listener position");
     }
     
     void LinkBufferToSource(AppState *appState) {
-      alSourcei(appState->sources[0], AL_BUFFER, appState->buffers[0]);
-      CheckALError("setting the buffer to the source");
+        for(int i = 0; i < NUM_TREASURES; i++){
+          alSourcei(appState->sources[i], AL_BUFFER, appState->buffers[0]);
+          CheckALError("setting the buffer to the source");
+            }
     }
     
     void StartSource(AppState *appState) {
-      alSourcePlay(appState->sources[0]);
-      CheckALError("starting the source");
+        for(int i = 0; i < NUM_TREASURES; i++){
+          alSourcePlay(appState->sources[i]);
+          CheckALError("starting the source");
+        }
     }
     
     void StopSource(AppState *appState) {
-      alSourceStop(appState->sources[0]);
-      CheckALError("stopping the source");
+        for(int i = 0; i < NUM_TREASURES; i++){
+          alSourceStop(appState->sources[i]);
+          CheckALError("stopping the source");
+        }
     }
     
     void ReleaseResources(AppState *appState,
                           ALCdevice *alDevice,
                           ALCcontext *alContext) {
-      alDeleteSources(1, appState->sources);
+      alDeleteSources(NUM_TREASURES, appState->sources);
       alDeleteBuffers(1, appState->buffers);
       alcDestroyContext(alContext);
       alcCloseDevice(alDevice);
@@ -591,7 +445,7 @@ protected:
         
         alGenBuffers(1, &appState.buffers[0]);
 
-        alBufferData(appState.buffers[0], format, soundData.data(), soundData.size() , SAMPLE_RATE);
+        alBufferData(appState.buffers[0], format, soundData.data(), calculateTotalDuration(a) , SAMPLE_RATE);
         
     }
     
@@ -872,6 +726,7 @@ protected:
             }
         }
         *CamPos = newCamPos;
+        PositionListenerInScene(CamPos->x, CamPos->y, CamPos->z);
     }
     
     ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
