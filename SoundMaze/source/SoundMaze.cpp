@@ -16,15 +16,22 @@ const std::string MODEL_PATH_MAZE = "models/maze.obj";
 const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
 const std::string MODEL_PATH_SKYBOX = "models/SkyBoxCube.obj";
 
-const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze_albedo.jpg";
-const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze_metallic.jpg";
-const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze_roughness.jpg";
-const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze_ao.jpg";
+const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze/maze_albedo.jpg";
+const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze/maze_metallic.jpg";
+const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze/maze_roughness.jpg";
+const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze/maze_ao.jpg";
 
-const std::string TEXTURE_PATH_TREASURE_base = "textures/treasure_baseColor.png";
-const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
-const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
-const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
+const std::string TEXTURE_PATH_TREASURE_base = "textures/treasures/treasure_baseColor.png";
+const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasures/treasure_metallic.png";
+const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasures/treasure_roughness.png";
+const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasures/treasure_metallic.png";
+
+const char* SKYBOX_RIGHT = "textures/sky1/right.png";
+const char* SKYBOX_LEFT = "textures/sky1/left.png";
+const char* SKYBOX_TOP = "textures/sky1/top.png";
+const char* SKYBOX_BOTTOM = "textures/sky1/bottom.png";
+const char* SKYBOX_FRONT = "textures/sky1/front.png";
+const char* SKYBOX_BACK = "textures/sky1/back.png";
 
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
@@ -173,6 +180,11 @@ struct Lights {
 	};
 };
 
+struct Fire {
+	glm::vec2 resolution = glm::vec2(0.1, 0.1);
+	float time = 0.0f;
+};
+
 class SoundMaze : public BaseProject {
 protected:
 
@@ -193,7 +205,7 @@ protected:
 		windowTitle = "Inside the Sound Maze...";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
-		// Non può essere spostata dentro init
+		// Non puï¿½ essere spostata dentro init
 		uniformBlocksInPool = 2 + 1 + 2 * NUM_TREASURES; // 2 per maze + 1 per skybox + 1 per treasure
 		texturesInPool = 4 + 1 + 4 * NUM_TREASURES; // 4 per maze + 1 per skybox + 4 per treasure
 		setsInPool = 2 + 1 + 2 * NUM_TREASURES; // 2 per maze + 1 per skybox + 2 per treasure
@@ -209,12 +221,12 @@ protected:
 		
 			sky.init(this, MODEL_PATH_SKYBOX, 
 				{
-				"textures/sky/right.png",
-				"textures/sky/left.png",
-				"textures/sky/top.png",
-				"textures/sky/bottom.png",
-				"textures/sky/front.png",
-				"textures/sky/back.png"
+				SKYBOX_RIGHT,
+				SKYBOX_LEFT,
+				SKYBOX_TOP,
+				SKYBOX_BOTTOM,
+				SKYBOX_FRONT,
+				SKYBOX_BACK
 				});
 		}
 
@@ -272,7 +284,6 @@ protected:
 				{3, TEXTURE, 0, &maze.roughness_map},
 				{4, TEXTURE, 0, &maze.light_map},
 				});
-			
 			std::cout << "Maze Pipeline Initialized" << std::endl;
 		}
 		{
@@ -284,15 +295,11 @@ protected:
 			
 			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
 			treasuresPipeline.dsls[1].init(this, {
-				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-				{4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}
 				});
 			
 			treasuresPipeline.pipeline.init(this,
-				"shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv",
+				"shaders/graphics_treasures_vert.spv", "shaders/graphics_treasures_frag.spv",
 				{
 					&treasuresPipeline.dsls[0],
 					&treasuresPipeline.dsls[1]
@@ -308,15 +315,9 @@ protected:
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				treasuresPipeline.dss.push_back(DescriptorSet{});
 				treasuresPipeline.dss[NUM_TREASURES + i].init(this, &treasuresPipeline.dsls[1], {
-					//{0, TEXTURE, 0, &maze.albedo_map},
-					{0, UNIFORM, sizeof(Lights), nullptr},
-					{1, TEXTURE, 0, &treasure.albedo_map},
-					{2, TEXTURE, 0, &treasure.metallic_map},
-					{3, TEXTURE, 0, &treasure.roughness_map},
-					{4, TEXTURE, 0, &treasure.light_map},
+					{0, UNIFORM, sizeof(Fire), nullptr}
 					});
 			}
-			
 			std::cout << "Treasures Pipeline Initialized" << std::endl;
 		}
 	}
@@ -336,50 +337,43 @@ protected:
 				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
 				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
 				0, nullptr);
-		
+
 			firstSet = 1;
-			VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
-			VkDeviceSize offsets[] = { 0 };
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-			vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
 				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
 				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
 				0, nullptr);
-		
+			VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
 		}
 		
 		{
-			 //PIPELINE SKYBOX
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-					sky.skybox.skyBoxPipeline.graphicsPipeline);
-				VkBuffer vertexBuffersSk[] = { sky.skybox.skyboxModel.vertexBuffer };
-				VkDeviceSize offsetsSk[] = { 0 };
-				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
-				vkCmdBindIndexBuffer(commandBuffer, sky.skybox.skyboxModel.indexBuffer, 0,
-					VK_INDEX_TYPE_UINT32);
-				vkCmdBindDescriptorSets(commandBuffer,
-					VK_PIPELINE_BIND_POINT_GRAPHICS,
-					sky.skybox.skyBoxPipeline.pipelineLayout, 0, 1,
-					&sky.skybox.SkyBoxDescriptorSets[currentImage],
-					0, nullptr);
-				vkCmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(sky.skybox.skyboxModel.indices.size()), 1, 0, 0, 0);
+			//PIPELINE SKYBOX
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, sky.skybox.skyBoxPipeline.graphicsPipeline);
+			
+			VkBuffer vertexBuffersSk[] = { sky.skybox.skyboxModel.vertexBuffer };
+			VkDeviceSize offsetsSk[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
+			vkCmdBindIndexBuffer(commandBuffer, sky.skybox.skyboxModel.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				sky.skybox.skyBoxPipeline.pipelineLayout, 0, 1,
+				&sky.skybox.SkyBoxDescriptorSets[currentImage],
+				0, nullptr);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(sky.skybox.skyboxModel.indices.size()), 1, 0, 0, 0);
 		}
 				
 		{
 			// Treasures
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
-
 			for (int i = 0; i < NUM_TREASURES; i++) {
-				
 				firstSet = 0;
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
 					&treasuresPipeline.dss[i].descriptorSets[currentImage],
 					0, nullptr);
-				
 				
 				firstSet = 1;
 				VkBuffer vertexBuffers[] = { treasure.model.vertexBuffer };
@@ -391,7 +385,6 @@ protected:
 					&treasuresPipeline.dss[NUM_TREASURES + i].descriptorSets[currentImage],
 					0, nullptr);
 				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
-				
 			}
 		}
 	}
@@ -514,10 +507,10 @@ protected:
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
 		
 		ModelViewProjection mvp;
-		Lights l;
 
 		// Maze Pipeline
 		{
+			Lights l;
 			mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.1f, 0.0f));
 			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 			memcpy(data, &mvp, sizeof(mvp));
@@ -530,14 +523,16 @@ protected:
 
 		// Treasures Pipeline
 		{
+			Fire f;
+			f.time = time;
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 				memcpy(data, &mvp, sizeof(mvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
 			
-				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
-				memcpy(data, &l, sizeof(l));
+				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(f), 0, &data);
+				memcpy(data, &f, sizeof(f));
 				vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);
 			}
 		}
