@@ -14,21 +14,30 @@
 
 const std::string MODEL_PATH_MAZE = "models/maze.obj";
 const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
+const std::string MODEL_PATH_SKYBOX = "models/SkyBoxCube.obj";
 
-const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze_albedo.jpg";
-const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze_metallic.jpg";
-const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze_roughness.jpg";
-const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze_ao.jpg";
 
-const std::string TEXTURE_PATH_TREASURE_base = "textures/treasure_baseColor.png";
-const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
-const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
-const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
-const char *AUDIO_PATH = "audio/148.wav";
+const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze/maze_albedo.jpg";
+const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze/maze_metallic.jpg";
+const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze/maze_roughness.jpg";
+const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze/maze_ao.jpg";
+
+const std::string TEXTURE_PATH_TREASURE_base = "textures/treasures/treasure_baseColor.png";
+const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasures/treasure_metallic.png";
+const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasures/treasure_roughness.png";
+const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasures/treasure_metallic.png";
+
+const char* SKYBOX_RIGHT = "textures/sky1/right.png";
+const char* SKYBOX_LEFT = "textures/sky1/left.png";
+const char* SKYBOX_TOP = "textures/sky1/top.png";
+const char* SKYBOX_BOTTOM = "textures/sky1/bottom.png";
+const char* SKYBOX_FRONT = "textures/sky1/front.png";
+const char* SKYBOX_BACK = "textures/sky1/back.png";
+const char* AUDIO_PATH = "audio/248.wav";
 
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
-constexpr float NUM_TREASURES = 10;
+constexpr int NUM_TREASURES = 10;
 constexpr float ROT_SPEED = glm::radians(60.0f);
 const float MOVE_SPEED = 0.5f;
 const float MOUSE_RES = 500.0f;
@@ -56,9 +65,8 @@ struct Object {
 };
 
 struct AppState{
-    ALuint sources[(int)NUM_TREASURES];
+    ALuint sources[NUM_TREASURES];
     ALuint buffers[1];
-    
     double duration;
 };
 
@@ -71,11 +79,6 @@ struct FloorMap {
     void init(const char* url) {
         loadImg(url);
         generateRandomTreasuresPositions();
-    }
-    
-    std::vector <glm::vec3> getTreasuresPositions(){
-        
-        return treasuresPositions;
     }
     
     void loadImg(const char* url) {
@@ -154,6 +157,16 @@ struct Pipe {
     }
 };
 
+struct Sky {
+	alignas(16) SkyBox skybox;
+	void init(BaseProject* BP, std::string objFile, std::vector <const char*> textureFiles) {
+		skybox.init(BP, objFile, textureFiles);
+	}
+	void cleanup() {
+		skybox.cleanup();
+	}
+};
+
 // UNIFORMS
 struct ModelViewProjection {
     alignas(16) glm::mat4 model;
@@ -177,61 +190,26 @@ struct Lights {
     };
 };
 
-struct GlobalUniformBufferObject {
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-};
-
-struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-};
-
-// UBO for Skybox
-struct UniformBufferObjectSkybox {
-    alignas(16) glm::mat4 mvpMat;
-    alignas(16) glm::mat4 mMat;
-    alignas(16) glm::mat4 nMat;
-};
-
-// Skybox
-struct SkyBoxModel {
-    const char* ObjFile;
-    const char* TextureFile[6];
-};
-
-const SkyBoxModel SkyBoxToLoad = {
-    "models/SkyBoxCube.obj",
-    {
-        "textures/sky/right.png", "textures/sky/left.png", "textures/sky/top.png",
-        "textures/sky/bottom.png", "textures/sky/front.png", "textures/sky/back.png"
-    }
+struct Fire {
+	glm::vec2 resolution = glm::vec2(0.1, 0.1);
+	float time = 0.0f;
 };
 
 class SoundMaze : public BaseProject {
 protected:
 
     bool enableDebug = false;
-    
-    //Custom pipeline for skybox
-    Pipeline skyBoxPipeline;
-    DescriptorSetLayout skyBoxDSL;
-    std::vector<VkBuffer> SkyBoxUniformBuffers;
-    std::vector<VkDeviceMemory> SkyBoxUniformBuffersMemory;
-    std::vector<VkDescriptorSet> SkyBoxDescriptorSets;    // to access uniforms in the pipeline
-    
-    Model M_maze;
-    Texture T_maze;
-    DescriptorSet DS_maze;
-    Model skyBox;    // Skybox
-    Texture skyBoxTexture;
+
     FloorMap map{};
     Object maze{};
     Object treasure{};
+	Sky sky;
     AppState appState;
 
     Pipe mazePipeline{};
     Pipe treasuresPipeline{};
-    
+
+    //
     ALCdevice *alDevice = OpenDevice();
     ALCcontext *alContext = CreateContext(alDevice);
     
@@ -240,6 +218,7 @@ protected:
     std::uint8_t bitsPerSample;
     std::vector<float> soundData;
     ALsizei size = 10000;
+    //
     
     void setWindowParameters() {
         windowWidth = 1200;
@@ -247,79 +226,64 @@ protected:
         windowTitle = "Inside the Sound Maze...";
         initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
         
-        // Non puÚ essere spostata dentro init
         uniformBlocksInPool = 2 + 1 + 2 * NUM_TREASURES; // 2 per maze + 1 per treasure
-        texturesInPool = 4 + 6 +  4 * NUM_TREASURES; // 4 per maze + 4 per treasure
+        texturesInPool = 4 + 1 + 4 * NUM_TREASURES; // 4 per maze + 4 per treasure
         setsInPool = 2 + 1 + 2 * NUM_TREASURES; // 2 per maze + 2 per treasure
     }
     
     void loadAudio(){
-        
-    
         AudioFile<float> a = loadWav(AUDIO_PATH);
-        
         std::vector<float> buffer = a.samples[0];
-        
         for(int i = 0; i < a.getNumSamplesPerChannel(); i++){
             
             soundData.push_back(buffer[i]);
         }
         
         ALenum format;
-        if(a.getNumChannels() == 1 && a.getBitDepth() == 8)
-                format = AL_FORMAT_MONO8;
-            else if(a.getNumChannels() == 1 && a.getBitDepth() == 16)
-                format = AL_FORMAT_MONO16;
-            else if(a.getNumChannels() == 2 && a.getBitDepth() == 8)
-                format = AL_FORMAT_STEREO8;
-            else if(a.getNumChannels() == 2 && a.getBitDepth() == 16)
-                format = AL_FORMAT_STEREO16;
-            else
-        {
-            std::cerr
-                << "ERROR: unrecognised wave format: "
-                << channels << " channels, "
-                << bitsPerSample << " bps" << std::endl;
+        if (a.getNumChannels() == 1 && a.getBitDepth() == 8) {
+            format = AL_FORMAT_MONO8;
         }
+        else if (a.getNumChannels() == 1 && a.getBitDepth() == 16) {
+            format = AL_FORMAT_MONO16;
+        }
+        else if (a.getNumChannels() == 2 && a.getBitDepth() == 8) {
+            format = AL_FORMAT_STEREO8;
+        }
+        else if (a.getNumChannels() == 2 && a.getBitDepth() == 16) {
+            format = AL_FORMAT_STEREO16;
+        }
+        else {
+            std::cerr << "ERROR: unrecognised wave format: " << channels << " channels, " << bitsPerSample << " bps" << std::endl;
+        }
+        
         GenerateBuffer(AL_FORMAT_MONO_FLOAT32, a);
-        
         CreateSource(&appState);
-        
         LinkBufferToSource(&appState);
-        
         PositionListenerInScene(0.0, 0.0, 0.0);
-        
         StartSource(&appState);
-        
     }
     
     ALCdevice *OpenDevice(void) {
-      ALCdevice *alDevice = alcOpenDevice(NULL);
-      //CheckALError("opening the defaul AL device");
-
-      return alDevice;
+        ALCdevice *alDevice = alcOpenDevice(NULL);
+        //CheckALError("opening the defaul AL device");
+        return alDevice;
     }
     
     void CreateSource(AppState *appState) {
-      alGenSources(NUM_TREASURES, appState->sources);
-      alDistanceModel(AL_LINEAR_DISTANCE_CLAMPED);
+        alGenSources(NUM_TREASURES, appState->sources);
+        alDistanceModel(AL_LINEAR_DISTANCE_CLAMPED);
 
-      for(int i = 0; i < NUM_TREASURES; i++){
-        
-          alSourcef(appState->sources[i],
-                    AL_GAIN,
-                    0.2f);
-          alSourcef(appState->sources[i], AL_MAX_DISTANCE, 2.0f);
-          alSourcei(appState->sources[i], AL_LOOPING, AL_TRUE);
-          
-          CheckALError("setting the AL property for gain");
+        for(int i = 0; i < NUM_TREASURES; i++){
+            alSourcef(appState->sources[i], AL_GAIN, 0.2f);
+            alSourcef(appState->sources[i], AL_MAX_DISTANCE, 2.0f);
+            alSourcei(appState->sources[i], AL_LOOPING, AL_TRUE);
+            CheckALError("setting the AL property for gain");
         }
-      
-      UpdateSourceLocation(appState);
+        UpdateSourceLocation(appState);
     }
     
     void UpdateSourceLocation(AppState *appState) {
-        std::vector <glm::vec3> pos = map.getTreasuresPositions();
+        std::vector <glm::vec3> pos = map.treasuresPositions;
       
         for(int i = 0; i < NUM_TREASURES; i++){
             
@@ -336,85 +300,76 @@ protected:
     }
         
     void CheckALError(const char *operation) {
-      ALenum alErr = alGetError();
+        ALenum alErr = alGetError();
       
-      if (alErr == AL_NO_ERROR) {
-        return;
-      }
+        if (alErr == AL_NO_ERROR) {
+            return;
+        }
       
-      char *errFormat = NULL;
-      switch (alErr) {
-        case AL_INVALID_NAME:
-          errFormat = "OpenAL Error: %s (AL_INVALID_NAME)";
-          break;
-        case AL_INVALID_VALUE:
-          errFormat = "OpenAL Error: %s (AL_INVALID_VALUE)";
-          break;
-        case AL_INVALID_ENUM:
-          errFormat = "OpenAL Error: %s (AL_INVALID_ENUM)";
-          break;
-        case AL_INVALID_OPERATION:
-          errFormat = "OpenAL Error: %s (AL_INVALID_OPERATION)";
-          break;
-        case AL_OUT_OF_MEMORY:
-          errFormat = "OpenAL Error: %s (AL_OUT_OF_MEMORY)";
-          break;
-        default:
-          errFormat = "OpenAL Error: %s Unknown";
-          break;
-      }
-      fprintf(stderr, errFormat, operation);
-      exit(1);
+        const char *errFormat = NULL;
+        switch (alErr) {
+            case AL_INVALID_NAME:
+                errFormat = "OpenAL Error: %s (AL_INVALID_NAME)";
+                break;
+            case AL_INVALID_VALUE:
+                errFormat = "OpenAL Error: %s (AL_INVALID_VALUE)";
+                break;
+            case AL_INVALID_ENUM:
+                errFormat = "OpenAL Error: %s (AL_INVALID_ENUM)";
+                break;
+            case AL_INVALID_OPERATION:
+                errFormat = "OpenAL Error: %s (AL_INVALID_OPERATION)";
+                break;
+            case AL_OUT_OF_MEMORY:
+                errFormat = "OpenAL Error: %s (AL_OUT_OF_MEMORY)";
+                break;
+            default:
+                errFormat = "OpenAL Error: %s Unknown";
+                break;
+        }
+        
+        fprintf(stderr, errFormat, operation);
+        exit(1);
     }
     
     ALCcontext * CreateContext(ALCdevice *alDevice) {
-      ALCcontext *alContext = alcCreateContext(alDevice, 0);
-      //CheckALError("creating AL context");
-      
-      alcMakeContextCurrent(alContext);
-      //CheckALError("making the context current");
-      
-      return alContext;
+        ALCcontext *alContext = alcCreateContext(alDevice, 0);
+        //CheckALError("creating AL context");
+        alcMakeContextCurrent(alContext);
+        //CheckALError("making the context current");
+        return alContext;
     }
     
-
     AudioFile<float> loadWav(const char *path){
-
         AudioFile<float> a;
         bool loadedOK = a.load (path);
-
         assert (loadedOK);
-
         std::cout << "Bit Depth: " << a.getBitDepth() << std::endl;
         std::cout << "Sample Rate: " << a.getSampleRate() << std::endl;
         std::cout << "Num Channels: " << a.getNumChannels() << std::endl;
         std::cout << "Length in Seconds: " << a.getLengthInSeconds() << std::endl;
         std::cout << std::endl;
-
         return a;
     }
     
     float calculateTotalDuration(AudioFile<float> a){
-        
         float frames = a.getLengthInSeconds() * a.getSampleRate();
         float framesToPutInBuffer = frames * SAMPLE_RATE / a.getSampleRate();
         appState.duration = framesToPutInBuffer / SAMPLE_RATE;
-        
-        std::cout<<"n frames:  "<< framesToPutInBuffer<< std::endl;
-        
+        //std::cout<<"n frames:  "<< framesToPutInBuffer<< std::endl;
         return framesToPutInBuffer;
     }
     
     void PositionListenerInScene(float x, float y, float z) {
-      alListener3f(AL_POSITION, x, y, z);
-      CheckALError("setting the listener position");
+        alListener3f(AL_POSITION, x, y, z);
+        CheckALError("setting the listener position");
     }
     
     void LinkBufferToSource(AppState *appState) {
         for(int i = 0; i < NUM_TREASURES; i++){
-          alSourcei(appState->sources[i], AL_BUFFER, appState->buffers[0]);
-          CheckALError("setting the buffer to the source");
-            }
+            alSourcei(appState->sources[i], AL_BUFFER, appState->buffers[0]);
+            CheckALError("setting the buffer to the source");
+        }
     }
     
     void StartSource(AppState *appState) {
@@ -431,21 +386,16 @@ protected:
         }
     }
     
-    void ReleaseResources(AppState *appState,
-                          ALCdevice *alDevice,
-                          ALCcontext *alContext) {
-      alDeleteSources(NUM_TREASURES, appState->sources);
-      alDeleteBuffers(1, appState->buffers);
-      alcDestroyContext(alContext);
-      alcCloseDevice(alDevice);
+    void ReleaseResources(AppState *appState, ALCdevice *alDevice, ALCcontext *alContext) {
+        alDeleteSources(NUM_TREASURES, appState->sources);
+        alDeleteBuffers(1, appState->buffers);
+        alcDestroyContext(alContext);
+        alcCloseDevice(alDevice);
     }
     
     void GenerateBuffer(ALenum format, AudioFile<float> a){
-        
         alGenBuffers(1, &appState.buffers[0]);
-                
         alBufferData(appState.buffers[0], format, soundData.data(), calculateTotalDuration(a), SAMPLE_RATE);
-        
     }
     
     void localInit() {
@@ -455,6 +405,16 @@ protected:
             //generateRandomTreasuresTranslations();
             assert(map.width > 0);
             assert(map.height > 0);
+
+            sky.init(this, MODEL_PATH_SKYBOX, 
+				{
+				SKYBOX_RIGHT,
+				SKYBOX_LEFT,
+				SKYBOX_TOP,
+				SKYBOX_BOTTOM,
+				SKYBOX_FRONT,
+				SKYBOX_BACK
+				});
         }
 
         // Load the models
@@ -475,13 +435,8 @@ protected:
             assert(treasure.model.indices.size() > 0);
         }
         
-        // Initialize Pipelines
-        
+		// Initialize Pipelines (the pipeline for skybox is initialized automatically)        
         {
-        skyBoxDSL.initSkybox(this);
-
-        skyBoxPipeline.init(this, "shaders/SkyBoxVert.spv", "shaders/SkyBoxFrag.spv", { &skyBoxDSL });
-        loadSkyBox();
             
             // Maze
             mazePipeline.dsls.push_back(DescriptorSetLayout{});
@@ -498,157 +453,140 @@ protected:
                 {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}, // AO
                 });
 
-            mazePipeline.pipeline.init(this,
-                "shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv",
-                {
-                    &mazePipeline.dsls[0],
-                    &mazePipeline.dsls[1]
-                });
-            
-            mazePipeline.dss.push_back(DescriptorSet{});
-            mazePipeline.dss[0].init(this, &mazePipeline.dsls[0], {
-                {0, UNIFORM, sizeof(ModelViewProjection), nullptr}
-                });
-            
-            mazePipeline.dss.push_back(DescriptorSet{});
-            mazePipeline.dss[1].init(this, &mazePipeline.dsls[1], {
-                {0, UNIFORM, sizeof(Lights), nullptr},
-                {1, TEXTURE, 0, &maze.albedo_map},
-                {2, TEXTURE, 0, &maze.metallic_map},
-                {3, TEXTURE, 0, &maze.roughness_map},
-                {4, TEXTURE, 0, &maze.light_map},
-                });
-            
-            std::cout << "Maze Pipeline Initialized" << std::endl;
-        }
-        {
-            // Treasures
-            treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
-            treasuresPipeline.dsls[0].init(this, {
-                {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1} // MVP
-                });
-            
-            treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
-            treasuresPipeline.dsls[1].init(this, {
-                {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-                {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-                {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-                {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-                {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1},
-                });
-            
-            treasuresPipeline.pipeline.init(this,
-                "shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv",
-                {
-                    &treasuresPipeline.dsls[0],
-                    &treasuresPipeline.dsls[1]
-                });
+			mazePipeline.pipeline.init(this, 
+				"shaders/graphics_maze_vert.spv", "shaders/graphics_maze_frag.spv", 
+				{ 
+					&mazePipeline.dsls[0],
+					&mazePipeline.dsls[1]
+				});
+			
+			mazePipeline.dss.push_back(DescriptorSet{});
+			mazePipeline.dss[0].init(this, &mazePipeline.dsls[0], {
+				{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+				});
+			
+			mazePipeline.dss.push_back(DescriptorSet{});
+			mazePipeline.dss[1].init(this, &mazePipeline.dsls[1], {
+				{0, UNIFORM, sizeof(Lights), nullptr},
+				{1, TEXTURE, 0, &maze.albedo_map},
+				{2, TEXTURE, 0, &maze.metallic_map},
+				{3, TEXTURE, 0, &maze.roughness_map},
+				{4, TEXTURE, 0, &maze.light_map},
+				});
+			std::cout << "Maze Pipeline Initialized" << std::endl;
+		}
+		{
+			// Treasures
+			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
+			treasuresPipeline.dsls[0].init(this, {
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1} // MVP
+				});
+			
+			treasuresPipeline.dsls.push_back(DescriptorSetLayout{});
+			treasuresPipeline.dsls[1].init(this, {
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1}
+				});
+			
+			treasuresPipeline.pipeline.init(this,
+				"shaders/graphics_treasures_vert.spv", "shaders/graphics_treasures_frag.spv",
+				{
+					&treasuresPipeline.dsls[0],
+					&treasuresPipeline.dsls[1]
+				});
 
-            for (int i = 0; i < NUM_TREASURES; i++) {
-                treasuresPipeline.dss.push_back(DescriptorSet{});
-                treasuresPipeline.dss[i].init(this, &treasuresPipeline.dsls[0], {
-                    {0, UNIFORM, sizeof(ModelViewProjection), nullptr}
-                    });
-            }
-            
-            for (int i = 0; i < NUM_TREASURES; i++) {
-                treasuresPipeline.dss.push_back(DescriptorSet{});
-                treasuresPipeline.dss[NUM_TREASURES + i].init(this, &treasuresPipeline.dsls[1], {
-                    //{0, TEXTURE, 0, &maze.albedo_map},
-                    {0, UNIFORM, sizeof(Lights), nullptr},
-                    {1, TEXTURE, 0, &treasure.albedo_map},
-                    {2, TEXTURE, 0, &treasure.metallic_map},
-                    {3, TEXTURE, 0, &treasure.roughness_map},
-                    {4, TEXTURE, 0, &treasure.light_map},
-                    });
-            }
-            
-            std::cout << "Treasures Pipeline Initialized" << std::endl;
-            
-        }
-        
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				treasuresPipeline.dss.push_back(DescriptorSet{});
+				treasuresPipeline.dss[i].init(this, &treasuresPipeline.dsls[0], {
+					{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+					});
+			}
+			
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				treasuresPipeline.dss.push_back(DescriptorSet{});
+				treasuresPipeline.dss[NUM_TREASURES + i].init(this, &treasuresPipeline.dsls[1], {
+					{0, UNIFORM, sizeof(Fire), nullptr}
+					});
+			}
+			
+			std::cout << "Treasures Pipeline Initialized" << std::endl;
+		}
+
         loadAudio();
-        
-    }
-    
+	}
+		
+	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
+	
+		int firstSet;
+		int descriptorSetCount = 1;
+		
+		// Graphics pipelines
+		{
+			// Maze
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mazePipeline.pipeline.graphicsPipeline);
+			
+			firstSet = 0;
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
+				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
+				0, nullptr);
+		
+			firstSet = 1;
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+				mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount, 
+				&mazePipeline.dss[firstSet].descriptorSets[currentImage],
+				0, nullptr);
+			VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
+		}
+		
+		{
+			//PIPELINE SKYBOX
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, sky.skybox.skyBoxPipeline.graphicsPipeline);
+			VkBuffer vertexBuffersSk[] = { sky.skybox.skyboxModel.vertexBuffer };
+			VkDeviceSize offsetsSk[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
+			vkCmdBindIndexBuffer(commandBuffer, sky.skybox.skyboxModel.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				sky.skybox.skyBoxPipeline.pipelineLayout, 0, 1,
+				&sky.skybox.SkyBoxDescriptorSets[currentImage],
+				0, nullptr);
+			vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(sky.skybox.skyboxModel.indices.size()), 1, 0, 0, 0);
+		}
+				
+		{
+			// Treasures
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
 
-    void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-    
-        int firstSet;
-        int descriptorSetCount = 1;
-        
-        // Graphics pipelines
-        {
-            // Maze
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mazePipeline.pipeline.graphicsPipeline);
-            
-            firstSet = 0;
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
-                &mazePipeline.dss[firstSet].descriptorSets[currentImage],
-                0, nullptr);
-        
-            firstSet = 1;
-            VkBuffer vertexBuffers[] = { maze.model.vertexBuffer };
-            VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, maze.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                mazePipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
-                &mazePipeline.dss[firstSet].descriptorSets[currentImage],
-                0, nullptr);
-        
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(maze.model.indices.size()), 1, 0, 0, 0);
-        }
-                
-        {    //PIPELINE SKYBOX
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        skyBoxPipeline.graphicsPipeline);
-        VkBuffer vertexBuffersSk[] = { skyBox.vertexBuffer};
-        VkDeviceSize offsetsSk[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersSk, offsetsSk);
-        vkCmdBindIndexBuffer(commandBuffer, skyBox.indexBuffer, 0,
-        VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        skyBoxPipeline.pipelineLayout, 0, 1,
-        &SkyBoxDescriptorSets[currentImage],
-        0, nullptr);
-        vkCmdDrawIndexed(commandBuffer,
-         static_cast<uint32_t>(skyBox.indices.size()), 1, 0, 0, 0);
-         }
-        
-        {
-            // Treasures
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, treasuresPipeline.pipeline.graphicsPipeline);
-
-            for (int i = 0; i < NUM_TREASURES; i++) {
-                
-                firstSet = 0;
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
-                    &treasuresPipeline.dss[i].descriptorSets[currentImage],
-                    0, nullptr);
-                
-                
-                firstSet = 1;
-                VkBuffer vertexBuffers[] = { treasure.model.vertexBuffer };
-                VkDeviceSize offsets[] = { 0 };
-                vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-                vkCmdBindIndexBuffer(commandBuffer, treasure.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
-                    &treasuresPipeline.dss[NUM_TREASURES + i].descriptorSets[currentImage],
-                    0, nullptr);
-                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
-                
-            }
-        }
-    }
-    
-    void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
-        static double old_xpos = 0, old_ypos = 0;
-        double xpos, ypos;
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				
+				firstSet = 0;
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
+					&treasuresPipeline.dss[i].descriptorSets[currentImage],
+					0, nullptr);
+				
+				
+				firstSet = 1;
+				VkBuffer vertexBuffers[] = { treasure.model.vertexBuffer };
+				VkDeviceSize offsets[] = { 0 };
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+				vkCmdBindIndexBuffer(commandBuffer, treasure.model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+					treasuresPipeline.pipeline.pipelineLayout, firstSet, descriptorSetCount,
+					&treasuresPipeline.dss[NUM_TREASURES + i].descriptorSets[currentImage],
+					0, nullptr);
+				vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(treasure.model.indices.size()), 1, 0, 0, 0);
+				
+			}
+		}
+	}
+	
+	void updateCameraAngles(glm::vec3 *CamAng, float deltaT, float ROT_SPEED) {
+		static double old_xpos = 0, old_ypos = 0;
+		double xpos, ypos;
 
         glfwGetCursorPos(window, &xpos, &ypos);
         double m_dx = xpos - old_xpos;
@@ -759,245 +697,75 @@ protected:
         float deltaT = time - lastTime;
         lastTime = time;
 
-        void* data;
-        //ASPECT RATIO
-        float aspect_ratio = swapChainExtent.width / (float)swapChainExtent.height;
-        
-        static glm::vec3 camAng = glm::vec3(0.0f);
-        static glm::vec3 camPos = glm::vec3(0.0f, .1f, 0.0f);
-        updateCameraAngles(&camAng, deltaT, ROT_SPEED);
-        updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
-        
-        ModelViewProjection mvp;
-        Lights l;
+		void* data;
 
-        // Maze Pipeline
-        {
-            mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.1f, 0.0f));
-            vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
-            memcpy(data, &mvp, sizeof(mvp));
-            vkUnmapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage]);
-        
-            vkMapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
-            memcpy(data, &l, sizeof(l));
-            vkUnmapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage]);
-        }
+		static glm::vec3 camAng = glm::vec3(0.0f);
+		static glm::vec3 camPos = glm::vec3(0.0f, .1f, 0.0f);
+		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
+		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
+		
+		ModelViewProjection mvp;
 
-        // SKYBOX
+		// Maze Pipeline
+		{
+			Lights l;
+			mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, 0.1f, 0.0f));
+			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
+			memcpy(data, &mvp, sizeof(mvp));
+			vkUnmapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage]);
+		
+			vkMapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
+			memcpy(data, &l, sizeof(l));
+			vkUnmapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage]);
+		}
 
-        //CAMERA VIEW MATRIX
-        GlobalUniformBufferObject guboObj{};
-        glm::mat4 CamMat = mvp.view;
-        guboObj.view = CamMat;
-        //CAMERA PROJECTION MATRIX
-        glm::mat4 out = glm::perspective(glm::radians(90.0f), aspect_ratio, 0.1f, 100.0f);
-        out[1][1] *= -1;
-        guboObj.proj = out;
-        
-        UniformBufferObjectSkybox uboSky{};
-        uboSky.mMat = glm::mat4(1.0f);
-        uboSky.nMat = glm::mat4(1.0f);
-        uboSky.mvpMat = out * glm::mat4(glm::mat3(CamMat)) * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.15f, 0.0f));
-        // SkyBox uniforms
-        vkMapMemory(device, SkyBoxUniformBuffersMemory[currentImage], 0,
-        sizeof(uboSky), 0, &data);
-        memcpy(data, &uboSky, sizeof(uboSky));
-        vkUnmapMemory(device, SkyBoxUniformBuffersMemory[currentImage]);
-        
-        // Treasures Pipeline
-        {
-            for (int i = 0; i < NUM_TREASURES; i++) {
-                mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
-                vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
-                memcpy(data, &mvp, sizeof(mvp));
-                vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
-            
-                vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
-                memcpy(data, &l, sizeof(l));
-                vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);
-            }
-        }
+		// Treasures Pipeline
+		{
+			Fire f;
+			f.time = time;
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
+				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
+				memcpy(data, &mvp, sizeof(mvp));
+				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
+			
+				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(f), 0, &data);
+				memcpy(data, &f, sizeof(f));
+				vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);
+			}
+		}
+
+        	// Skybox
+		{
+			float aspect_ratio = swapChainExtent.width / (float)swapChainExtent.height;
+
+			glm::mat4 CamMat = mvp.view;
+			glm::mat4 out = glm::perspective(glm::radians(90.0f), aspect_ratio, 0.1f, 100.0f);
+			out[1][1] *= -1;
+
+			GlobalUniformBufferObjectSkybox guboSky{};
+			guboSky.mMat = glm::mat4(1.0f);
+			guboSky.nMat = glm::mat4(1.0f);
+			guboSky.mvpMat = out * glm::mat4(glm::mat3(CamMat)) * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.15f, 0.0f));
+		
+			vkMapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage], 0, sizeof(guboSky), 0, &data);
+			memcpy(data, &guboSky, sizeof(guboSky));
+			vkUnmapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage]);
+		}
+		
 
     }
 
     void localCleanup() {
-        map.cleanup();
-        maze.cleanup();
-        treasure.cleanup();
-        skyBoxDSL.cleanup();
-        skyBoxPipeline.cleanup();
-        skyBox.cleanup();
-        skyBoxTexture.cleanup();
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
-        vkDestroyBuffer(device, SkyBoxUniformBuffers[i], nullptr);
-        vkFreeMemory(device, SkyBoxUniformBuffersMemory[i], nullptr);
-        }
-        mazePipeline.cleanup();
-        treasuresPipeline.cleanup();
+	    map.cleanup();
+		maze.cleanup();
+		sky.cleanup();
+		treasure.cleanup();
+		mazePipeline.cleanup();
+		treasuresPipeline.cleanup();
         ReleaseResources(&appState, alDevice , alContext);
     }
 
-    // Skybox aux functions
-    void createCubicTextureImage(const char* const FName[6], Texture& TD) {
-        int texWidth, texHeight, texChannels;
-        stbi_uc* pixels[6];
-        for (int i = 0; i < 6; i++) {
-            pixels[i] = stbi_load(FName[i], &texWidth, &texHeight,
-            &texChannels, STBI_rgb_alpha);
-            if (!pixels[i]) {
-                std::cout << FName[i]<< "\n";
-                throw std::runtime_error("failed to load texture image!");
-            }
-            std::cout << FName[i] << " -> size: " << texWidth
-            << "x" << texHeight << ", ch: " << texChannels << "\n";
-        }
-        
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
-        VkDeviceSize totalImageSize = texWidth * texHeight * 4 * 6;
-        TD.mipLevels = static_cast<uint32_t>(std::floor(
-        std::log2(std::max(texWidth, texHeight)))) + 1;
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        
-        createBuffer(totalImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory);
-            void* data;
-            
-        vkMapMemory(device, stagingBufferMemory, 0, totalImageSize, 0, &data);
-        for (int i = 0; i < 6; i++) {
-            memcpy(static_cast<char*>(data) + imageSize * i, pixels[i], static_cast<size_t>(imageSize));
-        }
-        
-        vkUnmapMemory(device, stagingBufferMemory);
-        for (int i = 0; i < 6; i++) {
-        stbi_image_free(pixels[i]);
-        }
-
-        createSkyBoxImage(texWidth, texHeight, TD.mipLevels, TD.textureImage,
-        TD.textureImageMemory);
-        transitionImageLayout(TD.textureImage, VK_FORMAT_R8G8B8A8_SRGB,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, TD.mipLevels, 6);
-            copyBufferToImage(stagingBuffer, TD.textureImage,
-            static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 6);
-            generateMipmaps(TD.textureImage, VK_FORMAT_R8G8B8A8_SRGB,
-            texWidth, texHeight, TD.mipLevels, 6);
-            vkDestroyBuffer(device, stagingBuffer, nullptr);
-            vkFreeMemory(device, stagingBufferMemory, nullptr);
-    }
-    
-    void createSkyBoxImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkImage& image, VkDeviceMemory& imageMemory) {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = width;
-        imageInfo.extent.height = height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = mipLevels;
-        imageInfo.arrayLayers = 6;
-        imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-        VkResult result = vkCreateImage(device, &imageInfo, nullptr, &image);
-        
-        if (result != VK_SUCCESS) {
-            PrintVkError(result);
-            throw std::runtime_error("failed to create image!");
-        }
-        
-        VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(device, image, &memRequirements);
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate image memory!");
-        }
-        vkBindImageMemory(device, image, imageMemory, 0);
-    }
-    
-    void createSkyBoxImageView(Texture& TD) {
-        TD.textureImageView = createImageView(TD.textureImage,
-        VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        TD.mipLevels,
-        VK_IMAGE_VIEW_TYPE_CUBE, 6);
-    }
-    
-    void createSkyBoxDescriptorSets() {
-        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(),
-        skyBoxDSL.descriptorSetLayout);
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
-        allocInfo.pSetLayouts = layouts.data();
-        SkyBoxDescriptorSets.resize(swapChainImages.size());
-        VkResult result = vkAllocateDescriptorSets(device, &allocInfo,
-        SkyBoxDescriptorSets.data());
-        if (result != VK_SUCCESS) {
-            PrintVkError(result);
-            throw std::runtime_error("failed to allocate Skybox descriptor sets!");
-        }
-        
-        for (size_t k = 0; k < swapChainImages.size(); k++) {
-            
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = SkyBoxUniformBuffers[k];
-            bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(UniformBufferObject);
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = skyBoxTexture.textureImageView;
-            imageInfo.sampler = skyBoxTexture.textureSampler;
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = SkyBoxDescriptorSets[k];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &bufferInfo;
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = SkyBoxDescriptorSets[k];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType =
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
-            vkUpdateDescriptorSets(device,
-            static_cast<uint32_t>(descriptorWrites.size()),
-            descriptorWrites.data(), 0, nullptr);
-        }
-    }
-    
-    void loadSkyBox() {
-        skyBox.init(this, SkyBoxToLoad.ObjFile);
-        createCubicTextureImage(SkyBoxToLoad.TextureFile, skyBoxTexture);
-        createSkyBoxImageView(skyBoxTexture);
-        skyBoxTexture.BP = this;
-        skyBoxTexture.createTextureSampler();
-        // Skybox createUniformBuffers
-        VkDeviceSize bufferSize = sizeof(UniformBufferObjectSkybox);
-        SkyBoxUniformBuffers.resize(swapChainImages.size());
-        SkyBoxUniformBuffersMemory.resize(swapChainImages.size());
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
-        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        SkyBoxUniformBuffers[i], SkyBoxUniformBuffersMemory[i]);
-        }
-        // Skybox descriptor sets
-        createSkyBoxDescriptorSets();
-    }
 };
 
 int main() {
