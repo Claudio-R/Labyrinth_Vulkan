@@ -5,10 +5,9 @@ layout (set = 1, binding = 0) uniform Fire {
     float time;
 } fire;
 
-layout(location = 0) in vec3 FragPos;
-layout(location = 1) in vec3 viewDir;
-layout(location = 2) in vec3 Normal;
-layout(location = 3) in vec2 TexCoords;
+layout(location = 0) in vec3 viewDir;
+layout(location = 1) in vec3 Normal;
+layout(location = 2) in vec2 TexCoords;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -19,9 +18,8 @@ layout(location = 0) out vec4 FragColor;
 #define distortionStrength	0.1
 
 vec2 hash( vec2 p ) {
-	p = vec2( dot(p,vec2(127.1,311.7)),
-			  dot(p,vec2(269.5,183.3)) );
-
+	p = vec2(dot(p,vec2(127.1,311.7)),
+			  dot(p,vec2(269.5,183.3)));
 	return -1.0 + 2.0*fract(sin(p) * 43758.5453123);
 }
 
@@ -65,7 +63,7 @@ vec3 bumpMap(vec2 uv) {
 }
 
 void main() {
-    vec2 uv = FragPos.xy/fire.resolution.xy;
+    vec2 uv = TexCoords.xy/fire.resolution.xy;
     vec3 normal = bumpMap(uv * vec2(1.0, 0.3) + distortionMovement * timeScale);
     vec2 displacement = clamp((normal.xy - .5) * distortionStrength, -1., 1.);
     uv += displacement;

@@ -16,15 +16,22 @@ const std::string MODEL_PATH_MAZE = "models/maze.obj";
 const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
 const std::string MODEL_PATH_SKYBOX = "models/SkyBoxCube.obj";
 
-const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze_albedo.jpg";
-const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze_metallic.jpg";
-const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze_roughness.jpg";
-const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze_ao.jpg";
+const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze/maze_albedo.jpg";
+const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze/maze_metallic.jpg";
+const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze/maze_roughness.jpg";
+const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze/maze_ao.jpg";
 
-const std::string TEXTURE_PATH_TREASURE_base = "textures/treasure_baseColor.png";
-const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasure_metallic.png";
-const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasure_roughness.png";
-const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasure_metallic.png";
+const std::string TEXTURE_PATH_TREASURE_base = "textures/treasures/treasure_baseColor.png";
+const std::string TEXTURE_PATH_TREASURE_Ref = "textures/treasures/treasure_metallic.png";
+const std::string TEXTURE_PATH_TREASURE_Rou = "textures/treasures/treasure_roughness.png";
+const std::string TEXTURE_PATH_TREASURE_Em = "textures/treasures/treasure_metallic.png";
+
+const char* SKYBOX_RIGHT = "textures/sky1/right.png";
+const char* SKYBOX_LEFT = "textures/sky1/left.png";
+const char* SKYBOX_TOP = "textures/sky1/top.png";
+const char* SKYBOX_BOTTOM = "textures/sky1/bottom.png";
+const char* SKYBOX_FRONT = "textures/sky1/front.png";
+const char* SKYBOX_BACK = "textures/sky1/back.png";
 
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
@@ -214,12 +221,12 @@ protected:
 		
 			sky.init(this, MODEL_PATH_SKYBOX, 
 				{
-				"textures/sky/right.png",
-				"textures/sky/left.png",
-				"textures/sky/top.png",
-				"textures/sky/bottom.png",
-				"textures/sky/front.png",
-				"textures/sky/back.png"
+				SKYBOX_RIGHT,
+				SKYBOX_LEFT,
+				SKYBOX_TOP,
+				SKYBOX_BOTTOM,
+				SKYBOX_FRONT,
+				SKYBOX_BACK
 				});
 		}
 
@@ -277,7 +284,6 @@ protected:
 				{3, TEXTURE, 0, &maze.roughness_map},
 				{4, TEXTURE, 0, &maze.light_map},
 				});
-			
 			std::cout << "Maze Pipeline Initialized" << std::endl;
 		}
 		{
@@ -312,7 +318,6 @@ protected:
 					{0, UNIFORM, sizeof(Fire), nullptr}
 					});
 			}
-			
 			std::cout << "Treasures Pipeline Initialized" << std::endl;
 		}
 	}
