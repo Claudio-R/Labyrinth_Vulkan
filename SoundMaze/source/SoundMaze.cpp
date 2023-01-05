@@ -635,45 +635,47 @@ protected:
 
         if (glfwGetKey(window, GLFW_KEY_A)) {
             
-            if(!isPlaying(NUM_TREASURES)){
-                alSourcePlay(appState.sources[NUM_TREASURES]);
-            }
-            
             newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
+            
+            if(!isPlaying(NUM_TREASURES)){
+                alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
 
         }
         if (glfwGetKey(window, GLFW_KEY_D)) {
             
-            if(!isPlaying(NUM_TREASURES)){
-                alSourcePlay(appState.sources[NUM_TREASURES]);
-            }
-            
             newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
-          
+            
+            if(!isPlaying(NUM_TREASURES)){
+                alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
 
         }
         if (glfwGetKey(window, GLFW_KEY_S)) {
-            
-            if(!isPlaying(NUM_TREASURES)){
-                alSourcePlay(appState.sources[NUM_TREASURES]);
-            }
-            
+          
             newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
             
-
+            if(!isPlaying(NUM_TREASURES)){
+                alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
         }
         if (glfwGetKey(window, GLFW_KEY_W)) {
             
-            if(!isPlaying(NUM_TREASURES)){
-                alSourcePlay(appState.sources[NUM_TREASURES]);
-            }
+           
             
             newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
 
+            if(!isPlaying(NUM_TREASURES)){
+                alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
         }
 
         if (enableDebug) {
