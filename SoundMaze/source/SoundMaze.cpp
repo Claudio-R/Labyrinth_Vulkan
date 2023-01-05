@@ -34,6 +34,8 @@ const char* SKYBOX_BOTTOM = "textures/sky1/bottom.png";
 const char* SKYBOX_FRONT = "textures/sky1/front.png";
 const char* SKYBOX_BACK = "textures/sky1/back.png";
 const char* AUDIO_PATH = "audio/248.wav";
+const char* STEPS_PATH   = "audio/steps.wav";
+
 
 constexpr float MODEL_DIAMETER = 10.0f;
 constexpr float TREASURE_DIAMETER = 0.1f;
@@ -65,8 +67,8 @@ struct Object {
 };
 
 struct AppState{
-    ALuint sources[NUM_TREASURES];
-    ALuint buffers[1];
+    ALuint sources[NUM_TREASURES + 1];
+    ALuint buffers[2];
     double duration;
 };
 
@@ -217,6 +219,8 @@ protected:
     std::int32_t sampleRate;
     std::uint8_t bitsPerSample;
     std::vector<float> soundData;
+    std::vector<float> soundData2;
+
     ALsizei size = 10000;
     //
     
@@ -238,22 +242,12 @@ protected:
             
             soundData.push_back(buffer[i]);
         }
-        
-        ALenum format;
-        if (a.getNumChannels() == 1 && a.getBitDepth() == 8) {
-            format = AL_FORMAT_MONO8;
-        }
-        else if (a.getNumChannels() == 1 && a.getBitDepth() == 16) {
-            format = AL_FORMAT_MONO16;
-        }
-        else if (a.getNumChannels() == 2 && a.getBitDepth() == 8) {
-            format = AL_FORMAT_STEREO8;
-        }
-        else if (a.getNumChannels() == 2 && a.getBitDepth() == 16) {
-            format = AL_FORMAT_STEREO16;
-        }
-        else {
-            std::cerr << "ERROR: unrecognised wave format: " << channels << " channels, " << bitsPerSample << " bps" << std::endl;
+
+        AudioFile<float> steps = loadWav(STEPS_PATH);
+        std::vector<float> buffer2 = steps.samples[0];
+        for(int i = 0; i < steps.getNumSamplesPerChannel(); i++){
+            
+            soundData2.push_back(buffer2[i]);
         }
         
         GenerateBuffer(AL_FORMAT_MONO_FLOAT32, a);
@@ -263,6 +257,12 @@ protected:
         StartSource(&appState);
     }
     
+    bool isPlaying(int index){
+          ALenum state;
+         alGetSourcei(appState.sources[index], AL_SOURCE_STATE, &state);
+        return (state == AL_PLAYING)
+    ;}
+    
     ALCdevice *OpenDevice(void) {
         ALCdevice *alDevice = alcOpenDevice(NULL);
         //CheckALError("opening the defaul AL device");
@@ -270,7 +270,7 @@ protected:
     }
     
     void CreateSource(AppState *appState) {
-        alGenSources(NUM_TREASURES, appState->sources);
+        alGenSources(NUM_TREASURES + 1, appState->sources);
         alDistanceModel(AL_LINEAR_DISTANCE_CLAMPED);
 
         for(int i = 0; i < NUM_TREASURES; i++){
@@ -279,6 +279,8 @@ protected:
             alSourcei(appState->sources[i], AL_LOOPING, AL_TRUE);
             CheckALError("setting the AL property for gain");
         }
+        alSourcef(appState->sources[NUM_TREASURES], AL_GAIN, 0.2f);
+
         UpdateSourceLocation(appState);
     }
     
@@ -370,6 +372,7 @@ protected:
             alSourcei(appState->sources[i], AL_BUFFER, appState->buffers[0]);
             CheckALError("setting the buffer to the source");
         }
+        alSourcei(appState->sources[NUM_TREASURES], AL_BUFFER, appState->buffers[1]);
     }
     
     void StartSource(AppState *appState) {
@@ -394,8 +397,9 @@ protected:
     }
     
     void GenerateBuffer(ALenum format, AudioFile<float> a){
-        alGenBuffers(1, &appState.buffers[0]);
+        alGenBuffers(2, &appState.buffers[0]);
         alBufferData(appState.buffers[0], format, soundData.data(), calculateTotalDuration(a), SAMPLE_RATE);
+        alBufferData(appState.buffers[1], format, soundData2.data(), calculateTotalDuration(a), SAMPLE_RATE);
     }
     
     void localInit() {
@@ -623,26 +627,53 @@ protected:
 
         glm::vec3 oldCamPos = *CamPos;
         glm::vec3 newCamPos = *CamPos;
+        
 
         if (glfwGetKey(window, GLFW_KEY_I)) {
             enableDebug = !enableDebug;
         }
 
         if (glfwGetKey(window, GLFW_KEY_A)) {
+            
+            if(!isPlaying(NUM_TREASURES)){
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
+            
             newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
+
         }
         if (glfwGetKey(window, GLFW_KEY_D)) {
+            
+            if(!isPlaying(NUM_TREASURES)){
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
+            
             newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
+          
+
         }
         if (glfwGetKey(window, GLFW_KEY_S)) {
+            
+            if(!isPlaying(NUM_TREASURES)){
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
+            
             newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
+            
+
         }
         if (glfwGetKey(window, GLFW_KEY_W)) {
+            
+            if(!isPlaying(NUM_TREASURES)){
+                alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
+            
             newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
+
         }
 
         if (enableDebug) {
@@ -655,9 +686,14 @@ protected:
                     glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 1, 0, 1)) * deltaT;
             }
         }
-
+        
+        if (newCamPos == *CamPos){
+            alSourceStop(appState.sources[NUM_TREASURES]);
+        }
+        
         if (!enableDebug) {
             if (map.isWallAround(newCamPos.x, newCamPos.z)) {
+                alSourceStop(appState.sources[NUM_TREASURES]);
                 *CamPos = oldCamPos;
                 return;
             }
