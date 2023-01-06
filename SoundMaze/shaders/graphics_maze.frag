@@ -42,7 +42,7 @@ void main()
         vec3 H = normalize(V + L);
         
         float distance = length(lights.positions[i] - fragmentPos);
-        float attenuation = 1.0 / (distance * distance);
+        float attenuation = 1.0 / (distance * distance * distance);
         vec3 lightColor = vec3(
             fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.0) * 43758.5453),
 			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.5) * 43758.5453),
@@ -70,7 +70,9 @@ void main()
     vec3 ambient = vec3(0.03) * albedo * ao;
     vec3 color = ambient + Lo;
     color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.0));  
+    
+    float gamma = 0.8;
+    color = pow(color, vec3(gamma));  
     
     FragColor = vec4(color, 1.0);
 } 

@@ -100,13 +100,12 @@ struct FloorMap {
             if (glm::length(candidate) > (MODEL_DIAMETER / 2.0f) - 0.5f) { continue; }
             if (glm::length(candidate) < 0.5f) { continue; }
             if (isWallAround(candidate.x, candidate.y, TREASURE_DIAMETER)) { 
-                std::cout << "Wall found" << std::endl;
                 continue; 
             }
 			
             bool valid = true;
             for (glm::vec3 pos : treasuresPositions) {
-				if (glm::length(pos - glm::vec3(candidate, 0.0f)) < 0.5f) {
+				if (glm::length(pos - glm::vec3(candidate, 0.0f)) < 4 * TREASURE_DIAMETER) {
 					valid = false;
 					break;
 				}
@@ -699,7 +698,7 @@ protected:
 			if (glm::distance(*CamPos, pos) < 2 * TREASURE_DIAMETER) {
 				int index = std::find(map.treasuresPositions.begin(), map.treasuresPositions.end(), pos) - map.treasuresPositions.begin();
 				map.treasuresPositions[index] = glm::vec3(0.0f);
-				//lights.isActive[index] = false;
+                alSourceStop(appState.sources[index]);
 				break;
 			}
         }
@@ -764,14 +763,12 @@ protected:
 			    f.time = time;
                 f.position = map.treasuresPositions[i];
 				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
-				//if (lights.isActive[i] == false) { mvp.model = glm::mat4(0.0f); }
-				if (glm::length(map.treasuresPositions[i]) < 0.1f) { mvp.model = glm::mat4(0.0f); }
+				if (glm::length(map.treasuresPositions[i]) < 0.01f) { mvp.model = glm::mat4(0.0f); }
                 
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 				memcpy(data, &mvp, sizeof(mvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
 			
-				//f.color = lights.lightColors[i];
 				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(f), 0, &data);
 				memcpy(data, &f, sizeof(f));
 				vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);
