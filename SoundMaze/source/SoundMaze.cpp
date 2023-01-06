@@ -35,12 +35,8 @@ const char* SKYBOX_BACK = "textures/sky1/back.png";
 const char* AUDIO_PATH = "audio/248.wav";
 const char* STEPS_PATH   = "audio/steps.wav";
 
-
-constexpr float MODEL_DIAMETER = 10.0f;
-constexpr float TREASURE_DIAMETER = 0.1f;
-constexpr int NUM_TREASURES = 10;
 constexpr float ROT_SPEED = glm::radians(60.0f);
-const float MOVE_SPEED = 0.5f;
+constexpr float MOVE_SPEED = 0.5f;
 const float MOUSE_RES = 500.0f;
 constexpr float FOVY = glm::radians(60.0f);
 const float NEAR_FIELD = 0.001f;
@@ -48,6 +44,11 @@ const float FAR_FIELD = 20.0f;
 const float SAMPLE_RATE = 44100.0f;
 constexpr float MAX_UP_ANGLE = glm::radians(70.0f);
 constexpr float MAX_DOWN_ANGLE = glm::radians(-70.0f);
+
+constexpr float SCALE_FACTOR = 2.0f;
+constexpr float MODEL_DIAMETER = 10.0f * SCALE_FACTOR;
+constexpr float TREASURE_DIAMETER = 0.1f * SCALE_FACTOR;
+constexpr int NUM_TREASURES = 10;
 
 struct Object {
     alignas(16) Model model;
@@ -98,10 +99,8 @@ struct FloorMap {
             candidate.y = (float)(rand() % 1000) * (MODEL_DIAMETER / (1000)) - (MODEL_DIAMETER / 2.0f);
 
             if (glm::length(candidate) > (MODEL_DIAMETER / 2.0f) - 0.5f) { continue; }
-            if (glm::length(candidate) < 0.5f) { continue; }
-            if (isWallAround(candidate.x, candidate.y, TREASURE_DIAMETER)) { 
-                continue; 
-            }
+            if (glm::length(candidate) < 0.5f * SCALE_FACTOR) { continue; }
+            if (isWallAround(candidate.x, candidate.y, TREASURE_DIAMETER)) { continue; }
 			
             bool valid = true;
             for (glm::vec3 pos : treasuresPositions) {
@@ -628,11 +627,19 @@ protected:
 
         glm::vec3 oldCamPos = *CamPos;
         glm::vec3 newCamPos = *CamPos;
+        float move_speed = 0.0;
         
         if (glfwGetKey(window, GLFW_KEY_I)) { enableDebug = !enableDebug; }
 
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)) {
+			move_speed = MOVE_SPEED * 2;
+		}
+        else {
+            move_speed = MOVE_SPEED;
+        }
+        
         if (glfwGetKey(window, GLFW_KEY_A)) {
-            newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+            newCamPos -= move_speed * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
             
             if(!isPlaying(NUM_TREASURES)){
@@ -642,7 +649,7 @@ protected:
         }
         
         if (glfwGetKey(window, GLFW_KEY_D)) {
-            newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+            newCamPos += move_speed * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
             
             if(!isPlaying(NUM_TREASURES)){
@@ -652,7 +659,7 @@ protected:
         }
         
         if (glfwGetKey(window, GLFW_KEY_S)) {
-            newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+            newCamPos += move_speed * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
             
             if(!isPlaying(NUM_TREASURES)){
@@ -662,7 +669,7 @@ protected:
         }
         
         if (glfwGetKey(window, GLFW_KEY_W)) {
-            newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
+            newCamPos -= move_speed * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
 
             if(!isPlaying(NUM_TREASURES)){
@@ -673,11 +680,11 @@ protected:
 
         if (enableDebug) {
             if (glfwGetKey(window, GLFW_KEY_C)) {
-                newCamPos += MOVE_SPEED * glm::vec3(glm::translate(
+                newCamPos += move_speed * glm::vec3(glm::translate(
                     glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 1, 0, 1)) * deltaT;
             }
             if (glfwGetKey(window, GLFW_KEY_X)) {
-                newCamPos -= MOVE_SPEED * glm::vec3(glm::translate(
+                newCamPos -= move_speed * glm::vec3(glm::translate(
                     glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 1, 0, 1)) * deltaT;
             }
         }
@@ -714,7 +721,9 @@ protected:
 
         glm::mat4 CamMat = glm::translate(glm::transpose(glm::mat4(CamDir)), -camPos);
 
-        mvp.model = glm::translate(glm::mat4(1.0), pos);
+        mvp.model = glm::scale(
+            glm::translate(glm::mat4(1.0), pos),
+            glm::vec3(SCALE_FACTOR));
         mvp.view = CamMat;
         mvp.proj = glm::perspective(FOVY, swapChainExtent.width / (float)swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
         mvp.proj[1][1] *= -1;
@@ -738,8 +747,8 @@ protected:
 		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
 		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
 		
-		ModelViewProjection mvp;
 
+		ModelViewProjection mvp;
 		// Maze Pipeline
 		{
 			mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, -0.1f, 0.0f));
