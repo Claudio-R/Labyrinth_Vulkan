@@ -646,6 +646,15 @@ protected:
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
             }
+
+            if (!enableDebug) {
+                if (map.isWallAround(newCamPos.x, newCamPos.z)) {
+                    alSourceStop(appState.sources[NUM_TREASURES]);
+                    *CamPos = oldCamPos;
+                    return;
+                }
+            }
+            
         }
         
         if (glfwGetKey(window, GLFW_KEY_D)) {
@@ -655,6 +664,14 @@ protected:
             if(!isPlaying(NUM_TREASURES)){
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
+
+            if (!enableDebug) {
+                if (map.isWallAround(newCamPos.x, newCamPos.z)) {
+                    alSourceStop(appState.sources[NUM_TREASURES]);
+                    *CamPos = oldCamPos;
+                    return;
+                }
             }
         }
         
@@ -666,6 +683,14 @@ protected:
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
             }
+
+            if (!enableDebug) {
+                if (map.isWallAround(newCamPos.x, newCamPos.z)) {
+                    alSourceStop(appState.sources[NUM_TREASURES]);
+                    *CamPos = oldCamPos;
+                    return;
+                }
+            }
         }
         
         if (glfwGetKey(window, GLFW_KEY_W)) {
@@ -675,6 +700,14 @@ protected:
             if(!isPlaying(NUM_TREASURES)){
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
+            }
+
+            if (!enableDebug) {
+                if (map.isWallAround(newCamPos.x, newCamPos.z)) {
+                    alSourceStop(appState.sources[NUM_TREASURES]);
+                    *CamPos = oldCamPos;
+                    return;
+                }
             }
         }
 
@@ -689,7 +722,7 @@ protected:
             }
         }
         
-        if (newCamPos == *CamPos){ alSourceStop(appState.sources[NUM_TREASURES]); }
+        if (newCamPos == oldCamPos){ alSourceStop(appState.sources[NUM_TREASURES]); }
         
         if (!enableDebug) {
             if (map.isWallAround(newCamPos.x, newCamPos.z)) {
