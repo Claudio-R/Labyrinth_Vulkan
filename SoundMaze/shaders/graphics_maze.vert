@@ -5,19 +5,17 @@ layout(set = 0, binding = 0) uniform uniformBufferObject {
 	mat4 proj;
 } ubo;
 
-layout(location = 0) in vec3 pos;
-layout(location = 1) in vec3 norm;
-layout(location = 2) in vec2 texCoord;
+layout(location = 0) in vec3 vertexPos;
+layout(location = 1) in vec3 vertexNorm;
+layout(location = 2) in vec2 vertexTexCoords;
 
-layout(location = 0) out vec3 fragPos;
-layout(location = 1) out vec3 fragViewDir;
-layout(location = 2) out vec3 fragNormal;
-layout(location = 3) out vec2 fragTexCoord;
+layout(location = 0) out vec3 fragmentPos;
+layout(location = 1) out vec3 fragmentNormal;
+layout(location = 2) out vec2 fragmentTexCoords;
 
 void main() {
-	fragPos = vec3(ubo.model * vec4(pos,  1.0));
-	fragViewDir = normalize((ubo.view[3]).xyz - fragPos);
-	fragNormal = vec3(ubo.model * vec4(norm, 0.0));
-	fragTexCoord = texCoord;
-	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(pos, 1.0);
+	fragmentPos = vec3(ubo.model * vec4(vertexPos,  1.0));
+	fragmentNormal = vec3(ubo.model * vec4(vertexNorm, 0.0));
+	fragmentTexCoords = vertexTexCoords;
+	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(vertexPos, 1.0);
 }

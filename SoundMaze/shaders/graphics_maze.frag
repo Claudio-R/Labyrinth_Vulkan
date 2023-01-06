@@ -1,79 +1,79 @@
 #version 450
+#define NUM_TREASURES 10
+#define PI 3.1415926535897932384626433832795
 
-// lights
 layout(set = 1, binding = 0) uniform Material {
-    vec3 lightPositions[4];
-    vec3 lightColors[4];
-} l;
+    vec3 camPos;
+    vec3 positions[NUM_TREASURES];
+} lights;
 
-// material parameters
 layout(set = 1, binding = 1) uniform sampler2D albedo_map;
 layout(set = 1, binding = 2) uniform sampler2D metallic_map;
 layout(set = 1, binding = 3) uniform sampler2D roughness_map;
 layout(set = 1, binding = 4) uniform sampler2D ao_map;
 
-layout(location = 0) in vec3 FragPos;
-layout(location = 1) in vec3 viewDir;
-layout(location = 2) in vec3 Normal;
-layout(location = 3) in vec2 TexCoords;
-
-// OUTPUT
+layout(location = 0) in vec3 fragmentPos;
+layout(location = 1) in vec3 fragmentNorm;
+layout(location = 2) in vec2 fragmentTexCoords;
 layout(location = 0) out vec4 FragColor;
 
-const float PI = 3.14159265359;
 float DistributionGGX(vec3 N, vec3 H, float roughness);
 float GeometrySchlickGGX(float NdotV, float roughness);
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 vec3 fresnelSchlick(float cosTheta, vec3 F0);
 
-void main()
-{		
-    vec3 albedo = texture(albedo_map, TexCoords).rgb;
-    float metallic = texture(metallic_map, TexCoords).r;
-    float roughness = texture(roughness_map, TexCoords).r;
-    float ao = texture(ao_map, TexCoords).r;
-    
-    vec3 N = normalize(Normal);
-    vec3 V = viewDir;
+vec3 albedo = texture(albedo_map, fragmentTexCoords).rgb;
+float metallic = texture(metallic_map, fragmentTexCoords).r;
+float roughness = texture(roughness_map, fragmentTexCoords).r;
+float ao = texture(ao_map, fragmentTexCoords).r;
 
-    vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, albedo, metallic);
-	           
+
+void main() 
+{		    
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    vec3 N = normalize(fragmentNorm);
+    vec3 V = normalize(lights.camPos - fragmentPos);
+    
     // reflectance equation
     vec3 Lo = vec3(0.0);
-    for(int i = 0; i < 4; ++i) 
+    for(int i = 0; i < NUM_TREASURES; ++i) 
     {
-        // calculate per-light radiance
-        vec3 L = normalize(l.lightPositions[i] - FragPos);
+        vec3 L = normalize(lights.positions[i] - fragmentPos);
         vec3 H = normalize(V + L);
-        float distance    = length(l.lightPositions[i] - FragPos);
-        float attenuation = 1.0 / (distance * distance);
-        vec3 radiance     = l.lightColors[i] * attenuation;        
+        
+        float distance = length(lights.positions[i] - fragmentPos);
+        float attenuation = 1.0 / (distance * distance * distance);
+        vec3 lightColor = vec3(
+            fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.0) * 43758.5453),
+			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.5) * 43758.5453),
+			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.8) * 43758.5453)
+		);
+        vec3 radiance = lightColor * attenuation * floor(length(lights.positions[i]));        
         
         // cook-torrance brdf
         float NDF = DistributionGGX(N, H, roughness);        
-        float G   = GeometrySmith(N, V, L, roughness);      
-        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
+        float G = GeometrySmith(N, V, L, roughness);      
+        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);       
         
         vec3 kS = F;
         vec3 kD = vec3(1.0) - kS;
         kD *= 1.0 - metallic;	  
         
-        vec3 numerator    = NDF * G * F;
+        vec3 numerator = NDF * G * F;
         float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-        vec3 specular     = numerator / denominator;  
+        vec3 specular = numerator / denominator;  
             
-        // add to outgoing radiance Lo
         float NdotL = max(dot(N, L), 0.0);                
         Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
     }   
   
     vec3 ambient = vec3(0.03) * albedo * ao;
     vec3 color = ambient + Lo;
-	
     color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));  
-   
+    
+    float gamma = 0.8;
+    color = pow(color, vec3(gamma));  
+    
     FragColor = vec4(color, 1.0);
 } 
 

@@ -16,9 +16,9 @@ const std::string MODEL_PATH_MAZE = "models/maze.obj";
 const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
 const std::string MODEL_PATH_SKYBOX = "models/SkyBoxCube.obj";
 
-const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze/maze_albedo.jpg";
-const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze/maze_metallic.jpg";
-const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze/maze_roughness.jpg";
+const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze/maze_alb.jpg";
+const std::string TEXTURE_PATH_MAZE_Ref = "textures/maze/maze_ref.jpg";
+const std::string TEXTURE_PATH_MAZE_Rou = "textures/maze/maze_rou.jpg";
 const std::string TEXTURE_PATH_MAZE_Ao = "textures/maze/maze_ao.jpg";
 
 const std::string TEXTURE_PATH_TREASURE_base = "textures/treasures/treasure_baseColor.png";
@@ -100,13 +100,12 @@ struct FloorMap {
             if (glm::length(candidate) > (MODEL_DIAMETER / 2.0f) - 0.5f) { continue; }
             if (glm::length(candidate) < 0.5f) { continue; }
             if (isWallAround(candidate.x, candidate.y, TREASURE_DIAMETER)) { 
-                std::cout << "Wall found" << std::endl;
                 continue; 
             }
 			
             bool valid = true;
             for (glm::vec3 pos : treasuresPositions) {
-				if (glm::length(pos - glm::vec3(candidate, 0.0f)) < 0.5f) {
+				if (glm::length(pos - glm::vec3(candidate, 0.0f)) < 4 * TREASURE_DIAMETER) {
 					valid = false;
 					break;
 				}
@@ -191,24 +190,13 @@ struct ModelViewProjection {
 };
 
 struct Lights {
-    glm::vec3 lightPositions[4] = {
-        glm::vec3(- 0.1, 0.1, - 0.1),
-        glm::vec3(- 0.1, 0.1, + 0.1),
-        glm::vec3(+ 0.1, 0.1, - 0.1),
-        glm::vec3(+ 0.1, 0.1, + 0.1)
-    };
-    
-    glm::vec3 lightColors[4] = {
-        glm::vec3(1, 0, 0),
-        glm::vec3(0, 1, 0),
-        glm::vec3(0, 0, 1),
-        glm::vec3(1, 1, 1)
-    };
+    alignas(16) glm::vec3 camPos;
+    alignas(16) glm::vec3 lightPositions[NUM_TREASURES];
 };
 
 struct Fire {
-	glm::vec2 resolution = glm::vec2(0.9, 0.5);
-	float time = 0.0f;
+    alignas(16) float time = 0.0f;
+    alignas(16) glm::vec3 position;
 };
 
 class SoundMaze : public BaseProject {
@@ -219,6 +207,7 @@ protected:
     FloorMap map{};
     Object maze{};
     Object treasure{};
+	Lights lights{};
 	Sky sky;
     AppState appState;
 
@@ -402,8 +391,8 @@ protected:
     }
     
     void ReleaseResources(AppState *appState, ALCdevice *alDevice, ALCcontext *alContext) {
-        alDeleteSources(NUM_TREASURES, appState->sources);
-        alDeleteBuffers(1, appState->buffers);
+        alDeleteSources(NUM_TREASURES + 1, appState->sources);
+        alDeleteBuffers(2, appState->buffers);
         alcDestroyContext(alContext);
         alcCloseDevice(alDevice);
     }
@@ -415,10 +404,9 @@ protected:
     }
     
     void localInit() {
-        // Load the map
+        // Load the map and skybo\x
         {
             map.init("textures/high-constrast-maze-map.png");
-            //generateRandomTreasuresTranslations();
             assert(map.width > 0);
             assert(map.height > 0);
 
@@ -528,6 +516,7 @@ protected:
 		}
 
         loadAudio();
+
 	}
 		
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
@@ -640,12 +629,9 @@ protected:
         glm::vec3 oldCamPos = *CamPos;
         glm::vec3 newCamPos = *CamPos;
         
-        if (glfwGetKey(window, GLFW_KEY_I)) {
-            enableDebug = !enableDebug;
-        }
+        if (glfwGetKey(window, GLFW_KEY_I)) { enableDebug = !enableDebug; }
 
         if (glfwGetKey(window, GLFW_KEY_A)) {
-            
             newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
             
@@ -653,10 +639,9 @@ protected:
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
             }
-
         }
+        
         if (glfwGetKey(window, GLFW_KEY_D)) {
-            
             newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
             
@@ -664,10 +649,9 @@ protected:
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
             }
-
         }
+        
         if (glfwGetKey(window, GLFW_KEY_S)) {
-          
             newCamPos += MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
             
@@ -676,10 +660,8 @@ protected:
                 alSourcePlay(appState.sources[NUM_TREASURES]);
             }
         }
+        
         if (glfwGetKey(window, GLFW_KEY_W)) {
-            
-           
-            
             newCamPos -= MOVE_SPEED * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(0, 0, 1, 1)) * deltaT;
 
@@ -700,9 +682,7 @@ protected:
             }
         }
         
-        if (newCamPos == *CamPos){
-            alSourceStop(appState.sources[NUM_TREASURES]);
-        }
+        if (newCamPos == *CamPos){ alSourceStop(appState.sources[NUM_TREASURES]); }
         
         if (!enableDebug) {
             if (map.isWallAround(newCamPos.x, newCamPos.z)) {
@@ -711,17 +691,14 @@ protected:
                 return;
             }
         }
+        
         *CamPos = newCamPos;
         
         for (glm::vec3 pos : map.treasuresPositions) {
 			if (glm::distance(*CamPos, pos) < 2 * TREASURE_DIAMETER) {
-				std::cout << "Treasure found!" << std::endl;
 				int index = std::find(map.treasuresPositions.begin(), map.treasuresPositions.end(), pos) - map.treasuresPositions.begin();
-				//alSourceStop(appState.sources[index]);
 				map.treasuresPositions[index] = glm::vec3(0.0f);
-                for (glm::vec3 pos : map.treasuresPositions) {
-					std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
-                }
+                alSourceStop(appState.sources[index]);
 				break;
 			}
         }
@@ -730,7 +707,6 @@ protected:
     }
     
     ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
-
         ModelViewProjection mvp{};
         glm::mat3 CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.y, glm::vec3(0.0f, 1.0f, 0.0f))) *
             glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.x, glm::vec3(1.0f, 0.0f, 0.0f))) *
@@ -739,12 +715,10 @@ protected:
         glm::mat4 CamMat = glm::translate(glm::transpose(glm::mat4(CamDir)), -camPos);
 
         mvp.model = glm::translate(glm::mat4(1.0), pos);
-
         mvp.view = CamMat;
         mvp.proj = glm::perspective(FOVY, swapChainExtent.width / (float)swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
         mvp.proj[1][1] *= -1;
         return mvp;
-
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
@@ -768,26 +742,29 @@ protected:
 
 		// Maze Pipeline
 		{
-			Lights l;
 			mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, -0.1f, 0.0f));
 			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 			memcpy(data, &mvp, sizeof(mvp));
 			vkUnmapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage]);
 		
-			vkMapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage], 0, sizeof(l), 0, &data);
-			memcpy(data, &l, sizeof(l));
+			lights.camPos = camPos;
+			for (int i = 0; i < NUM_TREASURES; i++) {
+				lights.lightPositions[i] = map.treasuresPositions[i];
+			}
+			vkMapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage], 0, sizeof(lights), 0, &data);
+			memcpy(data, &lights, sizeof(lights));
 			vkUnmapMemory(device, mazePipeline.dss[1].uniformBuffersMemory[0][currentImage]);
 		}
 
 		// Treasures Pipeline
 		{
 			Fire f;
-			f.time = time;
 			for (int i = 0; i < NUM_TREASURES; i++) {
+			    f.time = time;
+                f.position = map.treasuresPositions[i];
 				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
-				if (map.treasuresPositions[i] == glm::vec3(0.0f)) {
-					mvp.model = glm::mat4(0.0f);
-                }
+				if (glm::length(map.treasuresPositions[i]) < 0.01f) { mvp.model = glm::mat4(0.0f); }
+                
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 				memcpy(data, &mvp, sizeof(mvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
@@ -815,8 +792,6 @@ protected:
 			memcpy(data, &guboSky, sizeof(guboSky));
 			vkUnmapMemory(device, sky.skybox.SkyBoxUniformBuffersMemory[currentImage]);
 		}
-		
-
     }
 
     void localCleanup() {
