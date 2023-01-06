@@ -193,26 +193,11 @@ struct ModelViewProjection {
 struct Lights {
     alignas(16) glm::vec3 camPos;
     alignas(16) glm::vec3 lightPositions[NUM_TREASURES];
-    alignas(16) glm::vec3 lightColors[NUM_TREASURES] = {
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
-    };
-    alignas(16) bool isActive[NUM_TREASURES] = {
-		true, true, true, true, true, true, true, true, true, true
-	};
 };
 
 struct Fire {
-	glm::vec2 resolution = glm::vec2(0.9, 0.5);
-	float time = 0.0f;
+    alignas(16) float time = 0.0f;
+    alignas(16) glm::vec3 position;
 };
 
 class SoundMaze : public BaseProject {
@@ -532,6 +517,7 @@ protected:
 		}
 
         loadAudio();
+
 	}
 		
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
@@ -712,8 +698,8 @@ protected:
         for (glm::vec3 pos : map.treasuresPositions) {
 			if (glm::distance(*CamPos, pos) < 2 * TREASURE_DIAMETER) {
 				int index = std::find(map.treasuresPositions.begin(), map.treasuresPositions.end(), pos) - map.treasuresPositions.begin();
-				map.treasuresPositions[index] = glm::vec3(0.0f, -2.0f, 0.0f);
-				lights.isActive[index] = false;
+				map.treasuresPositions[index] = glm::vec3(0.0f);
+				//lights.isActive[index] = false;
 				break;
 			}
         }
@@ -774,15 +760,18 @@ protected:
 		// Treasures Pipeline
 		{
 			Fire f;
-			f.time = time;
 			for (int i = 0; i < NUM_TREASURES; i++) {
+			    f.time = time;
+                f.position = map.treasuresPositions[i];
 				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
-				if (lights.isActive[i] == false) { mvp.model = glm::mat4(0.0f); }
+				//if (lights.isActive[i] == false) { mvp.model = glm::mat4(0.0f); }
+				if (glm::length(map.treasuresPositions[i]) < 0.1f) { mvp.model = glm::mat4(0.0f); }
                 
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 				memcpy(data, &mvp, sizeof(mvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
 			
+				//f.color = lights.lightColors[i];
 				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(f), 0, &data);
 				memcpy(data, &f, sizeof(f));
 				vkUnmapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage]);

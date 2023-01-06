@@ -2,13 +2,9 @@
 #define NUM_TREASURES 10
 #define PI 3.1415926535897932384626433832795
 
-// lights
 layout(set = 1, binding = 0) uniform Material {
     vec3 camPos;
-    vec3 lightPositions[NUM_TREASURES];
-    vec3 lightColors[NUM_TREASURES];
-    bool isActive[NUM_TREASURES];
-    
+    vec3 positions[NUM_TREASURES];
 } lights;
 
 layout(set = 1, binding = 1) uniform sampler2D albedo_map;
@@ -16,7 +12,6 @@ layout(set = 1, binding = 2) uniform sampler2D metallic_map;
 layout(set = 1, binding = 3) uniform sampler2D roughness_map;
 layout(set = 1, binding = 4) uniform sampler2D ao_map;
 
-//layout(location = 1) in vec3 viewDir;
 layout(location = 0) in vec3 fragmentPos;
 layout(location = 1) in vec3 fragmentNorm;
 layout(location = 2) in vec2 fragmentTexCoords;
@@ -32,26 +27,28 @@ float metallic = texture(metallic_map, fragmentTexCoords).r;
 float roughness = texture(roughness_map, fragmentTexCoords).r;
 float ao = texture(ao_map, fragmentTexCoords).r;
 
+
 void main() 
 {		    
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
     vec3 N = normalize(fragmentNorm);
     vec3 V = normalize(lights.camPos - fragmentPos);
-
-    vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, albedo, metallic);
-	           
+    
     // reflectance equation
     vec3 Lo = vec3(0.0);
     for(int i = 0; i < NUM_TREASURES; ++i) 
     {
-        if (lights.isActive[i] == false) { continue; }
-        vec3 L = normalize(lights.lightPositions[i] - fragmentPos);
+        vec3 L = normalize(lights.positions[i] - fragmentPos);
         vec3 H = normalize(V + L);
         
-        // calculate per-light radiance
-        float distance = length(lights.lightPositions[i] - fragmentPos);
+        float distance = length(lights.positions[i] - fragmentPos);
         float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = lights.lightColors[i] * attenuation;        
+        vec3 lightColor = vec3(
+            fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.0) * 43758.5453),
+			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.5) * 43758.5453),
+			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.8) * 43758.5453)
+		);
+        vec3 radiance = lightColor * attenuation * floor(length(lights.positions[i]));        
         
         // cook-torrance brdf
         float NDF = DistributionGGX(N, H, roughness);        
