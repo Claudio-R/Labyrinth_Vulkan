@@ -193,6 +193,18 @@ struct ModelViewProjection {
 struct Lights {
     alignas(16) glm::vec3 camPos;
     alignas(16) glm::vec3 lightPositions[NUM_TREASURES];
+    alignas(16) glm::vec3 lightColors[NUM_TREASURES] = {
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+        glm::vec3((float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000, (float)(rand() % 1000) / 1000),
+    };
     alignas(16) bool isActive[NUM_TREASURES] = {
 		true, true, true, true, true, true, true, true, true, true
 	};

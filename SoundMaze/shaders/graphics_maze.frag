@@ -6,7 +6,9 @@
 layout(set = 1, binding = 0) uniform Material {
     vec3 camPos;
     vec3 lightPositions[NUM_TREASURES];
+    vec3 lightColors[NUM_TREASURES];
     bool isActive[NUM_TREASURES];
+    
 } lights;
 
 layout(set = 1, binding = 1) uniform sampler2D albedo_map;
@@ -49,7 +51,7 @@ void main()
         // calculate per-light radiance
         float distance = length(lights.lightPositions[i] - fragmentPos);
         float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = vec3(0.1, 0.1, 0.2) * attenuation;        
+        vec3 radiance = lights.lightColors[i] * attenuation;        
         
         // cook-torrance brdf
         float NDF = DistributionGGX(N, H, roughness);        
