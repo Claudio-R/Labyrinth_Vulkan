@@ -1,19 +1,7 @@
-/* TODO:
- * #ok. Correctly upload the map
- * #ok Fix the map
- * #ok Correctly implement collisions
- * #ok Fix shaders
- * #ok Add lights
- * #ok Add treasures
- * #ok Improve textures
- * #ok Fix map to have it easier to work with --> should be fixed even more
- * # Add sound
- */
-
 #include "SoundMaze.hpp"
 
 const std::string MODEL_PATH_MAZE = "models/maze.obj";
-const std::string MODEL_PATH_TREASURE = "models/icosphere.obj";
+const std::string MODEL_PATH_TREASURE = "models/sphere.obj";
 const std::string MODEL_PATH_SKYBOX = "models/SkyBoxCube.obj";
 
 const std::string TEXTURE_PATH_MAZE_Alb = "textures/maze/maze_alb.jpg";
@@ -77,6 +65,7 @@ struct FloorMap {
     int width;
     int height;
     std::vector <glm::vec3> treasuresPositions;
+    int treasuresFound = 0;
     
     void init(const char* url) {
         loadImg(url);
@@ -99,7 +88,7 @@ struct FloorMap {
             candidate.y = (float)(rand() % 1000) * (MODEL_DIAMETER / (1000)) - (MODEL_DIAMETER / 2.0f);
 
             if (glm::length(candidate) > (MODEL_DIAMETER / 2.0f) - 0.5f) { continue; }
-            if (glm::length(candidate) < 0.5f * SCALE_FACTOR) { continue; }
+            if (glm::length(candidate) < 0.6f * SCALE_FACTOR) { continue; }
             if (isWallAround(candidate.x, candidate.y, TREASURE_DIAMETER)) { continue; }
 			
             bool valid = true;
@@ -141,14 +130,18 @@ struct FloorMap {
         return img[map_index];
     }
     
-	void removeTreasure(glm::vec3 pos) {
-		for (int i = 0; i < treasuresPositions.size(); i++) {
-			if (glm::distance(treasuresPositions[i], pos) < 0.1f) {
-				treasuresPositions.erase(treasuresPositions.begin() + i);
-				return;
-			}
-		}
-	}
+    void checkPosition(glm::vec3 CamPos, AppState appState) {
+        for (glm::vec3 pos : treasuresPositions) {
+			if (glm::length(pos) == 0.0f) { continue; }
+            if (glm::distance(CamPos, pos) < 2 * TREASURE_DIAMETER) {
+                int index = std::find(treasuresPositions.begin(), treasuresPositions.end(), pos) - treasuresPositions.begin();
+                treasuresPositions[index] = glm::vec3(0.0f);
+                alSourceStop(appState.sources[index]);
+				treasuresFound++;
+                break;
+            }
+        }
+    }
     
     void cleanup() {
         stbi_image_free(img);
@@ -189,8 +182,9 @@ struct ModelViewProjection {
 };
 
 struct Lights {
-    alignas(16) glm::vec3 camPos;
+    alignas(16) glm::vec3 CamPos;
     alignas(16) glm::vec3 lightPositions[NUM_TREASURES];
+	alignas(16) int numFound;
 };
 
 struct Fire {
@@ -275,7 +269,7 @@ protected:
 
         for(int i = 0; i < NUM_TREASURES; i++){
             alSourcef(appState->sources[i], AL_GAIN, 0.2f);
-            alSourcef(appState->sources[i], AL_MAX_DISTANCE, 2.0f);
+            alSourcef(appState->sources[i], AL_MAX_DISTANCE, 2.0f * SCALE_FACTOR);
             alSourcei(appState->sources[i], AL_LOOPING, AL_TRUE);
             CheckALError("setting the AL property for gain");
         }
@@ -630,7 +624,7 @@ protected:
         float move_speed = 0.0;
         
         if (glfwGetKey(window, GLFW_KEY_I)) { enableDebug = !enableDebug; }
-
+        
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)) {
 			move_speed = MOVE_SPEED * 2;
 		}
@@ -641,12 +635,10 @@ protected:
         if (glfwGetKey(window, GLFW_KEY_A)) {
             newCamPos -= move_speed * glm::vec3(glm::rotate(glm::mat4(1.0f), CamAng.y,
                 glm::vec3(0.0f, 1.0f, 0.0f)) * glm::vec4(1, 0, 0, 1)) * deltaT;
-            
             if(!isPlaying(NUM_TREASURES)){
                 alSource3f(appState.sources[NUM_TREASURES], AL_POSITION, newCamPos.x, newCamPos.y, newCamPos.z);
                 alSourcePlay(appState.sources[NUM_TREASURES]);
             }
-
             if (!enableDebug) {
                 if (map.isWallAround(newCamPos.x, newCamPos.z)) {
                     alSourceStop(appState.sources[NUM_TREASURES]);
@@ -654,7 +646,6 @@ protected:
                     return;
                 }
             }
-            
         }
         
         if (glfwGetKey(window, GLFW_KEY_D)) {
@@ -723,27 +714,8 @@ protected:
         }
         
         if (newCamPos == oldCamPos){ alSourceStop(appState.sources[NUM_TREASURES]); }
+        else *CamPos = newCamPos;
         
-        if (!enableDebug) {
-            if (map.isWallAround(newCamPos.x, newCamPos.z)) {
-                alSourceStop(appState.sources[NUM_TREASURES]);
-                *CamPos = oldCamPos;
-                return;
-            }
-        }
-        
-        *CamPos = newCamPos;
-        
-        for (glm::vec3 pos : map.treasuresPositions) {
-			if (glm::distance(*CamPos, pos) < 2 * TREASURE_DIAMETER) {
-				int index = std::find(map.treasuresPositions.begin(), map.treasuresPositions.end(), pos) - map.treasuresPositions.begin();
-				map.treasuresPositions[index] = glm::vec3(0.0f);
-                alSourceStop(appState.sources[index]);
-				break;
-			}
-        }
-
-        PositionListenerInScene(CamPos->x, CamPos->y, CamPos->z);
     }
     
     ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
@@ -776,20 +748,38 @@ protected:
 		void* data;
 
 		static glm::vec3 camAng = glm::vec3(0.0f);
-		static glm::vec3 camPos = glm::vec3(0.0f, .1f, 0.0f);
+		static glm::vec3 CamPos = glm::vec3(0.0f, .1f, 0.0f);
 		updateCameraAngles(&camAng, deltaT, ROT_SPEED);
-		updateCameraPosition(&camPos, deltaT, MOVE_SPEED, camAng);
-		
-
+		updateCameraPosition(&CamPos, deltaT, MOVE_SPEED, camAng);
+        PositionListenerInScene(CamPos.x, CamPos.y, CamPos.z);
+        map.checkPosition(CamPos, appState);
+        
 		ModelViewProjection mvp;
 		// Maze Pipeline
 		{
-			mvp = computeMVP(camAng, camPos, glm::vec3(0.0f, -0.1f, 0.0f));
+			mvp = computeMVP(camAng, CamPos, glm::vec3(0.0f, -0.1f, 0.0f));
+            if (map.treasuresFound == 1) {
+                static auto endtime = std::chrono::high_resolution_clock::now();
+                auto now = std::chrono::high_resolution_clock::now();
+                auto countdown = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - endtime).count();
+                if (countdown >= 30.f) {
+                    mvp.model = glm::mat4(0.0f);
+                }
+                else {
+                    mvp.model = glm::rotate(
+						    mvp.model,
+                            time * 0.5f + time * time * 0.05f,
+                            glm::vec3(0.0f, 1.0f, 0.0f)
+                        );
+                }
+                mvp.view = glm::translate(mvp.view, CamPos);
+            }
 			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
 			memcpy(data, &mvp, sizeof(mvp));
 			vkUnmapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage]);
 		
-			lights.camPos = camPos;
+			lights.CamPos = CamPos;
+			lights.numFound = map.treasuresFound;
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				lights.lightPositions[i] = map.treasuresPositions[i];
 			}
@@ -804,7 +794,7 @@ protected:
 			for (int i = 0; i < NUM_TREASURES; i++) {
 			    f.time = time;
                 f.position = map.treasuresPositions[i];
-				mvp = computeMVP(camAng, camPos, map.treasuresPositions[i]);
+				mvp = computeMVP(camAng, CamPos, map.treasuresPositions[i]);
 				if (glm::length(map.treasuresPositions[i]) < 0.01f) { mvp.model = glm::mat4(0.0f); }
                 
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);

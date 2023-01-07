@@ -5,6 +5,7 @@
 layout(set = 1, binding = 0) uniform Material {
     vec3 camPos;
     vec3 positions[NUM_TREASURES];
+    int numFound;
 } lights;
 
 layout(set = 1, binding = 1) uniform sampler2D albedo_map;
@@ -21,12 +22,15 @@ float DistributionGGX(vec3 N, vec3 H, float roughness);
 float GeometrySchlickGGX(float NdotV, float roughness);
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 vec3 fresnelSchlick(float cosTheta, vec3 F0);
+vec3 computeLo(vec3 N, vec3 V, vec3 F0, vec3 lightPos, float decay, bool isMoon);
 
 vec3 albedo = texture(albedo_map, fragmentTexCoords).rgb;
 float metallic = texture(metallic_map, fragmentTexCoords).r;
 float roughness = texture(roughness_map, fragmentTexCoords).r;
 float ao = texture(ao_map, fragmentTexCoords).r;
 
+vec3 moonPosition = vec3(.0, 10., .0);
+vec3 moonColor = vec3(1.5 * lights.numFound, .0, 5.);
 
 void main() 
 {		    
@@ -34,39 +38,13 @@ void main()
     vec3 N = normalize(fragmentNorm);
     vec3 V = normalize(lights.camPos - fragmentPos);
     
-    // reflectance equation
     vec3 Lo = vec3(0.0);
-    for(int i = 0; i < NUM_TREASURES; ++i) 
-    {
-        vec3 L = normalize(lights.positions[i] - fragmentPos);
-        vec3 H = normalize(V + L);
-        
-        float distance = length(lights.positions[i] - fragmentPos);
-        float attenuation = 1.0 / (distance * distance * distance);
-        vec3 lightColor = vec3(
-            fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.0) * 43758.5453),
-			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.5) * 43758.5453),
-			fract(sin(dot(lights.positions[i], vec3(12.9898, 78.233, 45.1645)) + 0.8) * 43758.5453)
-		);
-        vec3 radiance = lightColor * attenuation * floor(length(lights.positions[i]));        
-        
-        // cook-torrance brdf
-        float NDF = DistributionGGX(N, H, roughness);        
-        float G = GeometrySmith(N, V, L, roughness);      
-        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);       
-        
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        kD *= 1.0 - metallic;	  
-        
-        vec3 numerator = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-        vec3 specular = numerator / denominator;  
-            
-        float NdotL = max(dot(N, L), 0.0);                
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
+    for(int i = 0; i < NUM_TREASURES; ++i) {
+        Lo += computeLo(N, V, F0, lights.positions[i], 3.0f, false);
     }   
-  
+
+    Lo += computeLo(N, V, F0, moonPosition, 2.0f, true);
+        
     vec3 ambient = vec3(0.03) * albedo * ao;
     vec3 color = ambient + Lo;
     color = color / (color + vec3(1.0));
@@ -76,6 +54,41 @@ void main()
     
     FragColor = vec4(color, 1.0);
 } 
+
+vec3 computeLo(vec3 N, vec3 V, vec3 F0, vec3 lightPos, float decay, bool isMoon) {
+
+    vec3 L = normalize(lightPos - fragmentPos);
+    vec3 H = normalize(V + L);
+    
+    float distance = length(lightPos - fragmentPos);
+    float attenuation = 1.0 / pow(distance, decay);
+    vec3 lightColor = vec3(
+            fract(sin(dot(lightPos, vec3(12.9898, 78.233, 45.1645)) + 0.0) * 43758.5453),
+			fract(sin(dot(lightPos, vec3(12.9898, 78.233, 45.1645)) + 0.5) * 43758.5453),
+			fract(sin(dot(lightPos, vec3(12.9898, 78.233, 45.1645)) + 0.8) * 43758.5453)
+		);
+    if (isMoon) {
+		lightColor = moonColor;
+	}
+    vec3 radiance = lightColor * attenuation * floor(length(lightPos));
+    
+    // cook-torrance brdf
+    float NDF = DistributionGGX(N, H, roughness);
+    float G = GeometrySmith(N, V, L, roughness);
+    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+    
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic;
+    
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+    vec3 specular = numerator / denominator;
+    
+    float NdotL = max(dot(N, L), 0.0);
+    vec3 Lo = (kD * albedo / PI + specular) * radiance * NdotL;
+    return Lo;
+}
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
