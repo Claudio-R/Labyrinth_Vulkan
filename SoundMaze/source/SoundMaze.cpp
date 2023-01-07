@@ -136,7 +136,19 @@ struct FloorMap {
             if (glm::distance(CamPos, pos) < 2 * TREASURE_DIAMETER) {
                 int index = std::find(treasuresPositions.begin(), treasuresPositions.end(), pos) - treasuresPositions.begin();
                 treasuresPositions[index] = glm::vec3(0.0f);
-                alSourceStop(appState.sources[index]);
+                
+                //fadeout
+                auto t  = 0;
+                float d = 1000;
+                while (t < d){
+                    
+                    alSourcef(appState.sources[index], AL_GAIN, 0.2f * (1.0f - t / d));
+                    t++;
+                }
+                    alSourceStop(appState.sources[index]);
+            
+                
+                //alSourceStop(appState.sources[index]);
 				treasuresFound++;
                 break;
             }
@@ -375,6 +387,7 @@ protected:
           CheckALError("starting the source");
         }
     }
+    
     
     void StopSource(AppState *appState) {
         for(int i = 0; i < NUM_TREASURES; i++){
