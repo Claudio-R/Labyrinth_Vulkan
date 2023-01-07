@@ -219,8 +219,8 @@ protected:
     ALsizei size = 10000;
     
     void setWindowParameters() {
-        windowWidth = 1200;
-        windowHeight = 800;
+        windowWidth = 1600;
+        windowHeight = 900;
         windowTitle = "Inside the Sound Maze...";
         initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
         
@@ -758,7 +758,7 @@ protected:
 		// Maze Pipeline
 		{
 			mvp = computeMVP(camAng, CamPos, glm::vec3(0.0f, -0.1f, 0.0f));
-            if (map.treasuresFound == 1) {
+            if (map.treasuresFound == NUM_TREASURES) {
                 static auto endtime = std::chrono::high_resolution_clock::now();
                 auto now = std::chrono::high_resolution_clock::now();
                 auto countdown = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - endtime).count();
