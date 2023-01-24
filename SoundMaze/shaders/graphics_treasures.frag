@@ -77,7 +77,6 @@ void main() {
 			fract(sin(dot(fire.position, vec3(12.9898, 78.233, 45.1645)) + 0.8) * 43758.5453)
 		);
     
-//    vec3 color = finalNoise * vec3(2.*n, 2.*n*n*n, n*n*n*n) * fireColor;
     vec3 color = pow(finalNoise, 1.0) * fireColor * n;
     FragColor = vec4(color, 1.0);
 }

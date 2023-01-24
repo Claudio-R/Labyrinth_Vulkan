@@ -43,7 +43,7 @@ struct Object {
     alignas(16) Texture albedo_map;
     alignas(16) Texture metallic_map;
     alignas(16) Texture roughness_map;
-    alignas(16) Texture light_map; // ao or emissive
+    alignas(16) Texture light_map;
     
     void cleanup() {
         model.cleanup();
@@ -62,14 +62,17 @@ struct AppState{
 
 struct FloorMap {
     stbi_uc* img;
+    GLFWwindow* window;
     int width;
     int height;
     std::vector <glm::vec3> treasuresPositions;
     int treasuresFound = 0;
     
-    void init(const char* url) {
+    void init(const char* url, GLFWwindow* window) {
         loadImg(url);
+        this->window = window;
         generateRandomTreasuresPositions();
+        
     }
     
     void loadImg(const char* url) {
@@ -141,15 +144,13 @@ struct FloorMap {
                 auto t  = 0;
                 float d = 1000;
                 while (t < d){
-                    
                     alSourcef(appState.sources[index], AL_GAIN, 0.2f * (1.0f - t / d));
                     t++;
                 }
-                    alSourceStop(appState.sources[index]);
-            
                 
-                //alSourceStop(appState.sources[index]);
+                alSourceStop(appState.sources[index]);
 				treasuresFound++;
+				glfwSetWindowTitle(window, ("Treasures left: " + std::to_string(NUM_TREASURES - treasuresFound)).c_str());
                 break;
             }
         }
@@ -187,8 +188,8 @@ struct Sky {
 };
 
 // UNIFORMS
-struct ModelViewProjection {
-    alignas(16) glm::mat4 model;
+struct WorldViewProjection {
+    alignas(16) glm::mat4 world;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
 };
@@ -209,10 +210,11 @@ protected:
 
     bool enableDebug = false;
 
-    FloorMap map{};
     Object maze{};
     Object treasure{};
-	Lights lights{};
+    FloorMap map{};
+	
+    Lights lights{};
 	Sky sky;
     AppState appState;
 
@@ -410,9 +412,9 @@ protected:
     }
     
     void localInit() {
-        // Load the map and skybo\x
+        // Load the map and skybox
         {
-            map.init("textures/high-constrast-maze-map.png");
+            map.init("textures/high-constrast-maze-map.png", window);
             assert(map.width > 0);
             assert(map.height > 0);
 
@@ -435,8 +437,7 @@ protected:
             maze.roughness_map.init(this, TEXTURE_PATH_MAZE_Rou);
             maze.light_map.init(this, TEXTURE_PATH_MAZE_Ao);
             assert(maze.model.indices.size() > 0);
-        }
-        {
+
             treasure.model.init(this, MODEL_PATH_TREASURE);
             treasure.albedo_map.init(this, TEXTURE_PATH_TREASURE_base);
             treasure.metallic_map.init(this, TEXTURE_PATH_TREASURE_base);
@@ -472,7 +473,7 @@ protected:
 			
 			mazePipeline.dss.push_back(DescriptorSet{});
 			mazePipeline.dss[0].init(this, &mazePipeline.dsls[0], {
-				{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+				{0, UNIFORM, sizeof(WorldViewProjection), nullptr}
 				});
 			
 			mazePipeline.dss.push_back(DescriptorSet{});
@@ -507,7 +508,7 @@ protected:
 			for (int i = 0; i < NUM_TREASURES; i++) {
 				treasuresPipeline.dss.push_back(DescriptorSet{});
 				treasuresPipeline.dss[i].init(this, &treasuresPipeline.dsls[0], {
-					{0, UNIFORM, sizeof(ModelViewProjection), nullptr}
+					{0, UNIFORM, sizeof(WorldViewProjection), nullptr}
 					});
 			}
 			
@@ -731,21 +732,19 @@ protected:
         
     }
     
-    ModelViewProjection computeMVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
-        ModelViewProjection mvp{};
-        glm::mat3 CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.y, glm::vec3(0.0f, 1.0f, 0.0f))) *
+    WorldViewProjection computeWVP(glm::vec3 camAng, glm::vec3 camPos, glm::vec3 pos = glm::vec3(0.0f)) {
+        WorldViewProjection wvp{};
+        glm::mat3 CamView = glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.y, glm::vec3(0.0f, 1.0f, 0.0f))) *
             glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.x, glm::vec3(1.0f, 0.0f, 0.0f))) *
             glm::mat3(glm::rotate(glm::mat4(1.0f), camAng.z, glm::vec3(0.0f, 0.0f, 1.0f)));
 
-        glm::mat4 CamMat = glm::translate(glm::transpose(glm::mat4(CamDir)), -camPos);
-
-        mvp.model = glm::scale(
+        wvp.world = glm::scale(
             glm::translate(glm::mat4(1.0), pos),
             glm::vec3(SCALE_FACTOR));
-        mvp.view = CamMat;
-        mvp.proj = glm::perspective(FOVY, swapChainExtent.width / (float)swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
-        mvp.proj[1][1] *= -1;
-        return mvp;
+        wvp.view = glm::translate(glm::transpose(glm::mat4(CamView)), -camPos);
+        wvp.proj = glm::perspective(FOVY, swapChainExtent.width / (float)swapChainExtent.height, NEAR_FIELD, FAR_FIELD);
+        wvp.proj[1][1] *= -1;
+        return wvp;
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
@@ -767,28 +766,28 @@ protected:
         PositionListenerInScene(CamPos.x, CamPos.y, CamPos.z);
         map.checkPosition(CamPos, appState);
         
-		ModelViewProjection mvp;
+		WorldViewProjection wvp;
 		// Maze Pipeline
 		{
-			mvp = computeMVP(camAng, CamPos, glm::vec3(0.0f, -0.1f, 0.0f));
+			wvp = computeWVP(camAng, CamPos, glm::vec3(0.0f, -0.1f, 0.0f));
             if (map.treasuresFound == NUM_TREASURES) {
                 static auto endtime = std::chrono::high_resolution_clock::now();
                 auto now = std::chrono::high_resolution_clock::now();
                 auto countdown = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - endtime).count();
-                if (countdown >= 30.f) {
-                    mvp.model = glm::mat4(0.0f);
+                if (countdown >= 20.f) {
+                    wvp.world = glm::mat4(0.0f);
                 }
                 else {
-                    mvp.model = glm::rotate(
-						    mvp.model,
-                            time * 0.5f + time * time * 0.05f,
+                    wvp.world = glm::rotate(
+						    wvp.world,
+                            countdown * 0.5f + countdown * countdown * 0.5f,
                             glm::vec3(0.0f, 1.0f, 0.0f)
                         );
                 }
-                mvp.view = glm::translate(mvp.view, CamPos);
+                wvp.view = glm::translate(wvp.view, CamPos);
             }
-			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
-			memcpy(data, &mvp, sizeof(mvp));
+			vkMapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage], 0, sizeof(wvp), 0, &data);
+			memcpy(data, &wvp, sizeof(wvp));
 			vkUnmapMemory(device, mazePipeline.dss[0].uniformBuffersMemory[0][currentImage]);
 		
 			lights.CamPos = CamPos;
@@ -807,11 +806,9 @@ protected:
 			for (int i = 0; i < NUM_TREASURES; i++) {
 			    f.time = time;
                 f.position = map.treasuresPositions[i];
-				mvp = computeMVP(camAng, CamPos, map.treasuresPositions[i]);
-				if (glm::length(map.treasuresPositions[i]) < 0.01f) { mvp.model = glm::mat4(0.0f); }
-                
-				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(mvp), 0, &data);
-				memcpy(data, &mvp, sizeof(mvp));
+				wvp = computeWVP(camAng, CamPos, map.treasuresPositions[i]);
+				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(wvp), 0, &data);
+				memcpy(data, &wvp, sizeof(wvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
 			
 				vkMapMemory(device, treasuresPipeline.dss[NUM_TREASURES + i].uniformBuffersMemory[0][currentImage], 0, sizeof(f), 0, &data);
@@ -824,7 +821,7 @@ protected:
 		{
 			float aspect_ratio = swapChainExtent.width / (float)swapChainExtent.height;
 
-			glm::mat4 CamMat = mvp.view;
+			glm::mat4 CamMat = wvp.view;
 			glm::mat4 out = glm::perspective(glm::radians(90.0f), aspect_ratio, 0.1f, 100.0f);
 			out[1][1] *= -1;
 
