@@ -39,11 +39,11 @@ constexpr float TREASURE_DIAMETER = 0.1f * SCALE_FACTOR;
 constexpr int NUM_TREASURES = 10;
 
 struct Object {
-    alignas(16) Model model;
-    alignas(16) Texture albedo_map;
-    alignas(16) Texture metallic_map;
-    alignas(16) Texture roughness_map;
-    alignas(16) Texture light_map;
+    Model model;
+    Texture albedo_map;
+    Texture metallic_map;
+    Texture roughness_map;
+    Texture light_map;
     
     void cleanup() {
         model.cleanup();
@@ -162,13 +162,13 @@ struct FloorMap {
 };
 
 struct Pipe {
-    alignas(16) Pipeline pipeline {};
-    alignas(16) DescriptorSetLayout dsl_global;
-    alignas(16) DescriptorSetLayout dsl_set;
-    alignas(16) DescriptorSet ds_global;
-    alignas(16) DescriptorSet ds_set;
-    alignas(16) std::vector <DescriptorSetLayout> dsls;
-    alignas(16) std::vector <DescriptorSet> dss;
+    Pipeline pipeline {};
+    DescriptorSetLayout dsl_global;
+    DescriptorSetLayout dsl_set;
+    DescriptorSet ds_global;
+    DescriptorSet ds_set;
+    std::vector <DescriptorSetLayout> dsls;
+    std::vector <DescriptorSet> dss;
 
     void cleanup() {
         pipeline.cleanup();
@@ -178,7 +178,7 @@ struct Pipe {
 };
 
 struct Sky {
-	alignas(16) SkyBox skybox;
+	SkyBox skybox;
 	void init(BaseProject* BP, std::string objFile, std::vector <const char*> textureFiles) {
 		skybox.init(BP, objFile, textureFiles);
 	}
@@ -201,7 +201,7 @@ struct Lights {
 };
 
 struct Fire {
-    alignas(16) float time = 0.0f;
+    alignas(4) float time = 0.0f;
     alignas(16) glm::vec3 position;
 };
 
