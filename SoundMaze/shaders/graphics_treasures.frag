@@ -15,7 +15,7 @@ layout(location = 0) out vec4 FragColor;
 #define distortionMovement vec2(-0.01, -0.3)
 #define normalStrength 40.0
 #define distortionStrength 0
-#define resolution vec2(0.4, 0.4)
+#define resolution vec2(.4, .4)
 
 vec2 hash(vec2 p) {
 	p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
@@ -59,7 +59,7 @@ vec3 bumpMap(vec2 uv) {
 }
 
 void main() {
-    vec2 uv = TexCoords.xy/resolution.xy;
+    vec2 uv = TexCoords.xy/resolution.xy + 2 * resolution.xy  ;
     
     vec3 normal = bumpMap(uv * vec2(1.0, 0.3) + distortionMovement * timeScale);
     vec2 displacement = clamp((normal.xy - .5) * distortionStrength, -1., 1.);
@@ -77,7 +77,6 @@ void main() {
 			fract(sin(dot(fire.position, vec3(12.9898, 78.233, 45.1645)) + 0.8) * 43758.5453)
 		);
     
-//    vec3 color = finalNoise * vec3(2.*n, 2.*n*n*n, n*n*n*n) * fireColor;
     vec3 color = pow(finalNoise, 1.0) * fireColor * n;
     FragColor = vec4(color, 1.0);
 }

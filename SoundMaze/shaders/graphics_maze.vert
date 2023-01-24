@@ -1,6 +1,6 @@
 #version 450
 layout(set = 0, binding = 0) uniform uniformBufferObject {
-	mat4 model;
+	mat4 world;
 	mat4 view;
 	mat4 proj;
 } ubo;
@@ -14,8 +14,8 @@ layout(location = 1) out vec3 fragmentNormal;
 layout(location = 2) out vec2 fragmentTexCoords;
 
 void main() {
-	fragmentPos = vec3(ubo.model * vec4(vertexPos,  1.0));
-	fragmentNormal = vec3(ubo.model * vec4(vertexNorm, 0.0));
+	fragmentPos = vec3(ubo.world * vec4(vertexPos,  1.0));
+	fragmentNormal = vec3(ubo.world * vec4(vertexNorm, 0.0));
 	fragmentTexCoords = vertexTexCoords;
-	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(vertexPos, 1.0);
+	gl_Position = ubo.proj * ubo.view * ubo.world * vec4(vertexPos, 1.0);
 }
