@@ -774,13 +774,13 @@ protected:
                 static auto endtime = std::chrono::high_resolution_clock::now();
                 auto now = std::chrono::high_resolution_clock::now();
                 auto countdown = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - endtime).count();
-                if (countdown >= 20.f) {
+                if (countdown >= 15.f) {
                     wvp.world = glm::mat4(0.0f);
                 }
                 else {
                     wvp.world = glm::rotate(
 						    wvp.world,
-                            countdown * 0.5f + countdown * countdown * 0.5f,
+                            countdown * countdown * 1.2f,
                             glm::vec3(0.0f, 1.0f, 0.0f)
                         );
                 }
@@ -807,6 +807,7 @@ protected:
 			    f.time = time;
                 f.position = map.treasuresPositions[i];
 				wvp = computeWVP(camAng, CamPos, map.treasuresPositions[i]);
+                if (glm::length(map.treasuresPositions[i]) < 0.01f) wvp.world = glm::mat4(0.0f);
 				vkMapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage], 0, sizeof(wvp), 0, &data);
 				memcpy(data, &wvp, sizeof(wvp));
 				vkUnmapMemory(device, treasuresPipeline.dss[i].uniformBuffersMemory[0][currentImage]);
